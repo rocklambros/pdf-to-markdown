@@ -41,37 +41,37 @@ cd pdf-to-markdown
 ### Convert all supported files in the script directory
 
 ```bash
-python3 pdf2md.py
+python3 mdconv.py
 ```
 
 ### Convert specific files
 
 ```bash
-python3 pdf2md.py report.pdf proposal.docx "meeting notes.pdf"
+python3 mdconv.py report.pdf proposal.docx "meeting notes.pdf"
 ```
 
 ### Scan a directory for supported files
 
 ```bash
-python3 pdf2md.py --input-dir ./documents
+python3 mdconv.py --input-dir ./documents
 ```
 
 ### Overwrite existing markdown files
 
 ```bash
-python3 pdf2md.py --force
+python3 mdconv.py --force
 ```
 
 ### Custom output directory
 
 ```bash
-python3 pdf2md.py --output-dir ./converted
+python3 mdconv.py --output-dir ./converted
 ```
 
 ### Combine options
 
 ```bash
-python3 pdf2md.py -f -o ./out docs/*.pdf docs/*.docx
+python3 mdconv.py -f -o ./out docs/*.pdf docs/*.docx
 ```
 
 By default, converted files are written to a `Text/` subdirectory next to the script.
@@ -113,7 +113,7 @@ Document content here...
 ## CLI Reference
 
 ```
-usage: pdf2md.py [-h] [--input-dir PATH] [--force] [--output-dir PATH] [files ...]
+usage: mdconv.py [-h] [--input-dir PATH] [--force] [--output-dir PATH] [files ...]
 
 Convert PDF and DOCX files to LLM-optimized Markdown.
 
