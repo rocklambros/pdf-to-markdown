@@ -43,10 +43,13 @@ Document content here...
 | **TXT structure detection** | Infers headings, lists, code blocks from plain text |
 | **Title extraction** | Pulls the first H1–H3 heading automatically |
 | **Link stripping** | `--strip-links` removes hyperlinks, keeps text |
+| **SSRF protection** | Blocks requests to private/reserved/loopback IPs |
+| **File size limits** | Configurable max file size via `--max-file-size` |
+| **Lazy loading** | Converter imports deferred until needed for fast startup |
 
 ## Installation
 
-Requires **Python 3.8+**.
+Requires **Python 3.10+**.
 
 ```bash
 pip install any2md
@@ -67,6 +70,7 @@ pip install .
 | [PyMuPDF](https://pymupdf.readthedocs.io/) + [pymupdf4llm](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/) | PDF extraction |
 | [mammoth](https://github.com/mwilliamson/python-mammoth) + [markdownify](https://github.com/matthewwithanm/python-markdownify) | DOCX conversion |
 | [trafilatura](https://trafilatura.readthedocs.io/) + [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/) | HTML/URL extraction |
+| [lxml](https://lxml.de/) | Fast HTML parsing |
 
 ## Usage
 
@@ -205,6 +209,7 @@ options:
   --force, -f           Overwrite existing .md files
   --output-dir, -o PATH Output directory (default: ./Text)
   --strip-links         Remove markdown links, keeping only the link text
+  --max-file-size BYTES Maximum file size in bytes (default: 104857600)
 ```
 
 ## Architecture
@@ -236,7 +241,7 @@ converters/__init__.py ─── dispatch by extension
 |--------|----------|
 | **PDF** | `pymupdf4llm.to_markdown()` → clean → frontmatter |
 | **DOCX** | `mammoth` (DOCX → HTML) → `markdownify` (HTML → Markdown) → clean → frontmatter |
-| **HTML/URL** | BS4 pre-clean → `trafilatura` extract (fallback: `markdownify`) → clean → frontmatter |
+| **HTML/URL** | `trafilatura` extract with markdown output (fallback: BS4 pre-clean → `markdownify`) → clean → frontmatter |
 | **TXT** | `structurize()` heuristics (headings, lists, code blocks) → clean → frontmatter |
 
 ### Adding a new format
@@ -244,6 +249,14 @@ converters/__init__.py ─── dispatch by extension
 1. Create `any2md/converters/newformat.py` with a `convert_newformat(path, output_dir, force, strip_links_flag) → bool` function
 2. Add the extension and function to `CONVERTERS` in `any2md/converters/__init__.py`
 3. Add the extension to `SUPPORTED_EXTENSIONS`
+
+## Security
+
+- **SSRF protection**: URL fetching validates resolved IPs against private, reserved, loopback, and link-local ranges before making requests.
+- **Scheme validation**: Only `http` and `https` URL schemes are accepted.
+- **File size limits**: Local files exceeding `--max-file-size` (default 100 MB) are skipped. HTML files are also checked before reading.
+- **Input sanitization**: Filenames are stripped of control characters, null bytes, and path separators.
+- **Trust model**: This tool processes local files and fetches URLs you provide. It does not execute embedded scripts or macros from any input format.
 
 ## License
 

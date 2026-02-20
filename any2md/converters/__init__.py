@@ -3,20 +3,7 @@
 import sys
 from pathlib import Path
 
-from any2md.converters.pdf import convert_pdf
-from any2md.converters.docx import convert_docx
-from any2md.converters.html import convert_html
-from any2md.converters.txt import convert_txt
-
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".html", ".htm", ".txt"}
-
-CONVERTERS = {
-    ".pdf": convert_pdf,
-    ".docx": convert_docx,
-    ".html": convert_html,
-    ".htm": convert_html,
-    ".txt": convert_txt,
-}
 
 
 def convert_file(
@@ -27,8 +14,33 @@ def convert_file(
 ) -> bool:
     """Dispatch to the appropriate converter based on file extension."""
     ext = file_path.suffix.lower()
-    converter = CONVERTERS.get(ext)
-    if converter is None:
-        print(f"  UNSUPPORTED: {file_path.name} (no converter for {ext})", file=sys.stderr)
+
+    if ext == ".pdf":
+        from any2md.converters.pdf import convert_pdf
+
+        return convert_pdf(
+            file_path, output_dir, force=force, strip_links_flag=strip_links_flag
+        )
+    elif ext == ".docx":
+        from any2md.converters.docx import convert_docx
+
+        return convert_docx(
+            file_path, output_dir, force=force, strip_links_flag=strip_links_flag
+        )
+    elif ext in (".html", ".htm"):
+        from any2md.converters.html import convert_html
+
+        return convert_html(
+            file_path, output_dir, force=force, strip_links_flag=strip_links_flag
+        )
+    elif ext == ".txt":
+        from any2md.converters.txt import convert_txt
+
+        return convert_txt(
+            file_path, output_dir, force=force, strip_links_flag=strip_links_flag
+        )
+    else:
+        print(
+            f"  UNSUPPORTED: {file_path.name} (no converter for {ext})", file=sys.stderr
+        )
         return False
-    return converter(file_path, output_dir, force=force, strip_links_flag=strip_links_flag)

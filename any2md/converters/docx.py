@@ -6,7 +6,13 @@ from pathlib import Path
 import mammoth
 import markdownify
 
-from any2md.utils import sanitize_filename, extract_title, clean_markdown, strip_links, escape_yaml_string
+from any2md.utils import (
+    sanitize_filename,
+    extract_title,
+    clean_markdown,
+    strip_links,
+    build_frontmatter,
+)
 
 
 def convert_docx(
@@ -49,14 +55,9 @@ def convert_docx(
         # Word count (DOCX has no reliable page count)
         word_count = len(md_text.split())
 
-        # Build frontmatter (escape values for valid YAML)
-        frontmatter = (
-            f'---\n'
-            f'title: "{escape_yaml_string(title)}"\n'
-            f'source_file: "{escape_yaml_string(docx_path.name)}"\n'
-            f'word_count: {word_count}\n'
-            f'type: docx\n'
-            f'---\n\n'
+        # Build frontmatter
+        frontmatter = build_frontmatter(
+            title, docx_path.name, doc_type="docx", word_count=word_count
         )
 
         full_text = frontmatter + md_text
@@ -67,6 +68,6 @@ def convert_docx(
         print(f"  OK: {out_name} ({word_count} words)")
         return True
 
-    except Exception as e:
+    except (OSError, ValueError) as e:
         print(f"  FAIL: {docx_path.name} -- {e}", file=sys.stderr)
         return False

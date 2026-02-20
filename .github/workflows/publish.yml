@@ -1,54 +1,81 @@
-name: Publish to PyPI
+name: Release to PyPI
 
 on:
   release:
     types: [published]
 
-  workflow_dispatch:
-    inputs:
-      target:
-        description: "Publish target"
-        required: true
-        default: "testpypi"
-        type: choice
-        options:
-          - testpypi
-          - pypi
-
-permissions:
-  id-token: write
-
 jobs:
-  build:
+  validate:
+    name: Validate build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      - name: Install build tools
-        run: pip install build
+      - name: Verify tag matches package version
+        env:
+          TAG_REF: ${{ github.ref_name }}
+        run: |
+          python - <<'EOF'
+          import re, pathlib, sys, os
+          tag = os.environ["TAG_REF"].lstrip("v")
+          text = pathlib.Path("any2md/__init__.py").read_text()
+          m = re.search(r'__version__\s*=\s*["\x27]([^"\x27]+)["\x27]', text)
+          if not m:
+              print("::error::Could not find __version__ in any2md/__init__.py")
+              sys.exit(1)
+          version = m.group(1)
+          if tag != version and not tag.startswith(version + "-"):
+              print(f"::error::Tag {tag!r} != __version__ {version!r}")
+              sys.exit(1)
+          print(f"Version OK: {version} (tag: {tag})")
+          EOF
 
-      - name: Build package
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Build sdist and wheel
         run: python -m build
 
-      - name: Upload build artifacts
+      - name: Validate distribution metadata
+        run: twine check dist/*
+
+      - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
 
+  smoke:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Smoke test
+        run: python -c "import any2md; print(f'any2md {any2md.__version__} OK')"
+
   publish-testpypi:
-    needs: build
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'testpypi'
+    name: Publish to TestPyPI
+    needs: [validate, smoke]
+    if: github.event.release.prerelease == true
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist/
@@ -57,19 +84,24 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          attestations: false
 
   publish-pypi:
-    needs: build
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'pypi')
+    name: Publish to PyPI
+    needs: [validate, smoke]
+    if: github.event.release.prerelease == false
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: false

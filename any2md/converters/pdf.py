@@ -6,7 +6,13 @@ from pathlib import Path
 import pymupdf
 import pymupdf4llm
 
-from any2md.utils import sanitize_filename, extract_title, clean_markdown, strip_links, escape_yaml_string
+from any2md.utils import (
+    sanitize_filename,
+    extract_title,
+    clean_markdown,
+    strip_links,
+    build_frontmatter,
+)
 
 
 def convert_pdf(
@@ -27,18 +33,16 @@ def convert_pdf(
         return True
 
     try:
-        # Get page count
-        doc = pymupdf.open(str(pdf_path))
-        page_count = len(doc)
-        doc.close()
+        with pymupdf.open(str(pdf_path)) as doc:
+            page_count = len(doc)
 
-        # Convert to markdown
-        md_text = pymupdf4llm.to_markdown(
-            str(pdf_path),
-            write_images=False,
-            show_progress=False,
-            force_text=True,
-        )
+            # Convert to markdown using the already-open document
+            md_text = pymupdf4llm.to_markdown(
+                doc,
+                write_images=False,
+                show_progress=False,
+                force_text=True,
+            )
 
         # Clean markdown content
         md_text = clean_markdown(md_text)
@@ -50,14 +54,9 @@ def convert_pdf(
         # Extract title
         title = extract_title(md_text, pdf_path.stem)
 
-        # Build frontmatter (escape values for valid YAML)
-        frontmatter = (
-            f'---\n'
-            f'title: "{escape_yaml_string(title)}"\n'
-            f'source_file: "{escape_yaml_string(pdf_path.name)}"\n'
-            f'pages: {page_count}\n'
-            f'type: pdf\n'
-            f'---\n\n'
+        # Build frontmatter
+        frontmatter = build_frontmatter(
+            title, pdf_path.name, doc_type="pdf", pages=page_count
         )
 
         full_text = frontmatter + md_text
@@ -68,6 +67,6 @@ def convert_pdf(
         print(f"  OK: {out_name} ({page_count} pages)")
         return True
 
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         print(f"  FAIL: {pdf_path.name} -- {e}", file=sys.stderr)
         return False

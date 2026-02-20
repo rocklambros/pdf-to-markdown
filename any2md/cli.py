@@ -6,14 +6,17 @@ import time
 from pathlib import Path
 
 from any2md.converters import convert_file, SUPPORTED_EXTENSIONS
-from any2md.converters.html import convert_html, fetch_url
+from any2md.converters.html import convert_url
 from any2md.utils import sanitize_filename, url_to_filename
 
-SCRIPT_DIR = Path.cwd()
-DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "Text"
+# Default max file size: 100 MB
+_DEFAULT_MAX_FILE_SIZE = 100 * 1024 * 1024
 
 
 def main():
+    script_dir = Path.cwd()
+    default_output_dir = script_dir / "Text"
+
     parser = argparse.ArgumentParser(
         description="Convert PDF, DOCX, HTML, and TXT files to LLM-optimized Markdown."
     )
@@ -24,31 +27,42 @@ def main():
         "If omitted, converts all supported files in the current directory.",
     )
     parser.add_argument(
-        "--input-dir", "-i",
+        "--input-dir",
+        "-i",
         type=Path,
         help="Directory to scan for supported files (PDF, DOCX, HTML).",
     )
     parser.add_argument(
-        "--force", "-f",
+        "--force",
+        "-f",
         action="store_true",
         help="Overwrite existing .md files.",
     )
     parser.add_argument(
-        "--output-dir", "-o",
+        "--output-dir",
+        "-o",
         type=Path,
-        default=DEFAULT_OUTPUT_DIR,
-        help=f"Output directory (default: {DEFAULT_OUTPUT_DIR}).",
+        default=default_output_dir,
+        help=f"Output directory (default: {default_output_dir}).",
     )
     parser.add_argument(
         "--strip-links",
         action="store_true",
         help="Remove markdown links, keeping only the link text.",
     )
+    parser.add_argument(
+        "--max-file-size",
+        type=int,
+        default=_DEFAULT_MAX_FILE_SIZE,
+        help=f"Maximum file size in bytes (default: {_DEFAULT_MAX_FILE_SIZE}).",
+    )
     args = parser.parse_args()
 
     # Determine which files to process
     if args.files and args.input_dir:
-        print("Error: cannot use both positional files and --input-dir.", file=sys.stderr)
+        print(
+            "Error: cannot use both positional files and --input-dir.", file=sys.stderr
+        )
         sys.exit(1)
 
     urls = []
@@ -76,13 +90,11 @@ def main():
             print(f"Error: not a directory: {args.input_dir}", file=sys.stderr)
             sys.exit(1)
         file_paths = sorted(
-            p for ext in SUPPORTED_EXTENSIONS
-            for p in args.input_dir.glob(f"*{ext}")
+            p for ext in SUPPORTED_EXTENSIONS for p in args.input_dir.glob(f"*{ext}")
         )
     else:
         file_paths = sorted(
-            p for ext in SUPPORTED_EXTENSIONS
-            for p in SCRIPT_DIR.glob(f"*{ext}")
+            p for ext in SUPPORTED_EXTENSIONS for p in script_dir.glob(f"*{ext}")
         )
 
     if not file_paths and not urls:
@@ -98,37 +110,49 @@ def main():
 
     # Process URLs
     for url in urls:
-        html_content, error = fetch_url(url)
-        if error:
-            print(f"  FAIL: {url} -- {error}", file=sys.stderr)
-            fail += 1
+        out_name = url_to_filename(url)
+        out_path = args.output_dir / out_name
+        if out_path.exists() and not args.force:
+            print(f"  SKIP (exists): {out_name}")
+            skip += 1
             continue
 
-        out_name = url_to_filename(url)
-        out_exists = (args.output_dir / out_name).exists()
-        if out_exists and not args.force:
-            skip += 1
-
-        result = convert_html(
-            None,
+        result = convert_url(
+            url,
             args.output_dir,
             force=args.force,
             strip_links_flag=args.strip_links,
-            source_url=url,
-            html_content=html_content,
         )
         if result:
-            if not (out_exists and not args.force):
-                ok += 1
+            ok += 1
         else:
             fail += 1
 
     # Process local files
     for file_path in file_paths:
         out_name = sanitize_filename(file_path.name)
-        out_exists = (args.output_dir / out_name).exists()
-        if out_exists and not args.force:
+        out_path = args.output_dir / out_name
+        if out_path.exists() and not args.force:
+            print(f"  SKIP (exists): {out_name}")
             skip += 1
+            continue
+
+        # File size check
+        try:
+            file_size = file_path.stat().st_size
+        except OSError as e:
+            print(f"  FAIL: {file_path.name} -- {e}", file=sys.stderr)
+            fail += 1
+            continue
+
+        if file_size > args.max_file_size:
+            print(
+                f"  SKIP (too large): {file_path.name} ({file_size} bytes, max {args.max_file_size})",
+                file=sys.stderr,
+            )
+            skip += 1
+            continue
+
         result = convert_file(
             file_path,
             args.output_dir,
@@ -136,8 +160,7 @@ def main():
             strip_links_flag=args.strip_links,
         )
         if result:
-            if not (out_exists and not args.force):
-                ok += 1
+            ok += 1
         else:
             fail += 1
 

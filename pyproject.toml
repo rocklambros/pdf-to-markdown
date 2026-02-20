@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Convert PDF, DOCX, HTML, and TXT files — or web pages by URL — to clean, LLM-optimized Markdown with YAML frontmatter."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 authors = [
     { name = "rocklambros", email = "rock@rockcyber.com" },
 ]
@@ -19,12 +19,13 @@ classifiers = [
     "Topic :: Text Processing :: Markup :: Markdown",
 ]
 dependencies = [
-    "pymupdf",
-    "pymupdf4llm",
-    "mammoth",
-    "markdownify",
-    "trafilatura",
-    "beautifulsoup4",
+    "pymupdf>=1.24.0",
+    "pymupdf4llm>=0.0.17",
+    "mammoth>=1.6.0",
+    "markdownify>=0.13.0",
+    "trafilatura>=1.12.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
 ]
 
 [project.scripts]

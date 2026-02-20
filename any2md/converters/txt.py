@@ -4,13 +4,20 @@ import re
 import sys
 from pathlib import Path
 
-from any2md.utils import sanitize_filename, extract_title, clean_markdown, strip_links, escape_yaml_string
+from any2md.utils import (
+    sanitize_filename,
+    extract_title,
+    clean_markdown,
+    strip_links,
+    build_frontmatter,
+    read_text_with_fallback,
+)
 
 # Patterns
 _SEPARATOR_RE = re.compile(r"^([=\-*_~])\1{2,}\s*$")
 _BULLET_RE = re.compile(r"^[•–·]\s+(.*)$")
 _NUMBERED_RE = re.compile(r"^\(?\d{1,3}[.)]\)?\s+(.*)$")
-_LETTERED_RE = re.compile(r"^\(?[a-zA-Z][.)]\)?\s+(.*)$")
+_LETTERED_RE = re.compile(r"^\(?[a-z][.)]\)?\s+(.*)$")
 _INDENT_RE = re.compile(r"^(?:    |\t)(.*)$")
 _ALL_CAPS_RE = re.compile(r"^[A-Z][A-Z0-9 /&,:\-]{2,78}$")
 
@@ -20,7 +27,24 @@ def _is_title_case(line: str) -> bool:
     words = line.split()
     if len(words) < 2:
         return False
-    skip = {"a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "from", "is"}
+    skip = {
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "but",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "by",
+        "from",
+        "is",
+    }
     caps = sum(1 for w in words if w[0].isupper() or w.lower() in skip)
     return caps >= len(words) * 0.7
 
@@ -122,12 +146,14 @@ def structurize(text: str) -> str:
                 continue
 
         # --- 6. Title Case sub-heading detection ---
-        if (3 <= len(stripped) <= 80
-                and not prev_stripped
-                and not next_stripped
-                and _is_title_case(stripped)
-                and not stripped.endswith((".", "!", "?", ",", ";", ":"))
-                and i > 0):
+        if (
+            3 <= len(stripped) <= 80
+            and not prev_stripped
+            and not next_stripped
+            and _is_title_case(stripped)
+            and not stripped.endswith((".", "!", "?", ",", ";", ":"))
+            and i > 0
+        ):
             output.append("### " + stripped)
             i += 1
             continue
@@ -157,11 +183,7 @@ def convert_txt(
         return True
 
     try:
-        # Read with encoding fallback
-        try:
-            raw_text = txt_path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            raw_text = txt_path.read_text(encoding="latin-1")
+        raw_text = read_text_with_fallback(txt_path)
 
         # Reject empty files
         if not raw_text.strip():
@@ -183,13 +205,8 @@ def convert_txt(
         word_count = len(md_text.split())
 
         # Build frontmatter
-        frontmatter = (
-            f'---\n'
-            f'title: "{escape_yaml_string(title)}"\n'
-            f'source_file: "{escape_yaml_string(txt_path.name)}"\n'
-            f'word_count: {word_count}\n'
-            f'type: txt\n'
-            f'---\n\n'
+        frontmatter = build_frontmatter(
+            title, txt_path.name, doc_type="txt", word_count=word_count
         )
 
         full_text = frontmatter + md_text
@@ -200,6 +217,6 @@ def convert_txt(
         print(f"  OK: {out_name} ({word_count} words)")
         return True
 
-    except Exception as e:
+    except (OSError, ValueError) as e:
         print(f"  FAIL: {txt_path.name} -- {e}", file=sys.stderr)
         return False
