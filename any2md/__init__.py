@@ -1,3 +1,3 @@
-"""Convert PDF, DOCX, and HTML files to LLM-optimized Markdown."""
+"""Convert PDF, DOCX, HTML, and TXT files to LLM-optimized Markdown."""
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"

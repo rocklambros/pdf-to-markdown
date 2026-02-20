@@ -6,14 +6,16 @@ from pathlib import Path
 from any2md.converters.pdf import convert_pdf
 from any2md.converters.docx import convert_docx
 from any2md.converters.html import convert_html
+from any2md.converters.txt import convert_txt
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".html", ".htm"}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".html", ".htm", ".txt"}
 
 CONVERTERS = {
     ".pdf": convert_pdf,
     ".docx": convert_docx,
     ".html": convert_html,
     ".htm": convert_html,
+    ".txt": convert_txt,
 }
 
 

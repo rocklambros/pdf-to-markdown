@@ -1,6 +1,6 @@
 # any2md
 
-Convert PDF, DOCX, and HTML files — or web pages by URL — to clean, LLM-optimized Markdown with YAML frontmatter.
+Convert PDF, DOCX, HTML, and TXT files — or web pages by URL — to clean, LLM-optimized Markdown with YAML frontmatter.
 
 One command. Any format. Consistent, structured output ready for language models.
 
@@ -33,13 +33,14 @@ Document content here...
 
 | Feature | Description |
 |---------|-------------|
-| **Multi-format** | PDF, DOCX, HTML (.html, .htm) |
+| **Multi-format** | PDF, DOCX, HTML (.html, .htm), TXT |
 | **URL fetching** | Pass any http/https URL as input |
 | **YAML frontmatter** | Title, source, page/word count, type |
 | **Batch processing** | Single file, directory scan, or mixed inputs |
 | **Auto-routing** | Dispatches to the correct converter by extension |
 | **Smart skip** | Won't overwrite existing files unless `--force` |
 | **Filename sanitization** | Spaces, special characters, unicode dashes handled |
+| **TXT structure detection** | Infers headings, lists, code blocks from plain text |
 | **Title extraction** | Pulls the first H1–H3 heading automatically |
 | **Link stripping** | `--strip-links` removes hyperlinks, keeps text |
 
@@ -84,8 +85,11 @@ any2md page.html
 # Web page by URL
 any2md https://example.com/article
 
-# Mixed batch — PDFs, DOCX, HTML, and URLs together
-any2md doc.pdf page.html https://example.com
+# Plain text file
+any2md notes.txt
+
+# Mixed batch — PDFs, DOCX, HTML, TXT, and URLs together
+any2md doc.pdf page.html notes.txt https://example.com
 ```
 
 ### Directory scanning
@@ -161,6 +165,17 @@ type: html
 ---
 ```
 
+**TXT** — structure inferred via heuristics, includes word count:
+
+```markdown
+---
+title: "Meeting Notes"
+source_file: "notes.txt"
+word_count: 892
+type: txt
+---
+```
+
 **URL** — records source URL instead of filename:
 
 ```markdown
@@ -177,16 +192,16 @@ type: html
 ```
 usage: any2md [-h] [--input-dir PATH] [--force] [--output-dir PATH] [--strip-links] [files ...]
 
-Convert PDF, DOCX, and HTML files to LLM-optimized Markdown.
+Convert PDF, DOCX, HTML, and TXT files to LLM-optimized Markdown.
 
 positional arguments:
-  files                 Files or URLs to convert. Supports PDF, DOCX, HTML
-                        files and http(s) URLs. If omitted, converts all
+  files                 Files or URLs to convert. Supports PDF, DOCX, HTML,
+                        TXT files and http(s) URLs. If omitted, converts all
                         supported files in the current directory.
 
 options:
   -h, --help            show this help message and exit
-  --input-dir, -i PATH  Directory to scan for supported files (PDF, DOCX, HTML)
+  --input-dir, -i PATH  Directory to scan for supported files (PDF, DOCX, HTML, TXT)
   --force, -f           Overwrite existing .md files
   --output-dir, -o PATH Output directory (default: ./Text)
   --strip-links         Remove markdown links, keeping only the link text
@@ -203,11 +218,11 @@ User Input (files, URLs, flags)
          ▼
 converters/__init__.py ─── dispatch by extension
          │
-    ┌────┼────┐
-    ▼    ▼    ▼
- pdf  docx  html ─── format-specific extraction
-    │    │    │
-    └────┼────┘
+    ┌────┼────┬────┐
+    ▼    ▼    ▼    ▼
+ pdf  docx  html  txt ─── format-specific extraction
+    │    │    │    │
+    └────┼────┴────┘
          ▼
       utils.py ─── clean, title-extract, sanitize, frontmatter
          │
@@ -222,6 +237,7 @@ converters/__init__.py ─── dispatch by extension
 | **PDF** | `pymupdf4llm.to_markdown()` → clean → frontmatter |
 | **DOCX** | `mammoth` (DOCX → HTML) → `markdownify` (HTML → Markdown) → clean → frontmatter |
 | **HTML/URL** | BS4 pre-clean → `trafilatura` extract (fallback: `markdownify`) → clean → frontmatter |
+| **TXT** | `structurize()` heuristics (headings, lists, code blocks) → clean → frontmatter |
 
 ### Adding a new format
 

@@ -15,7 +15,7 @@ DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "Text"
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert PDF, DOCX, and HTML files to LLM-optimized Markdown."
+        description="Convert PDF, DOCX, HTML, and TXT files to LLM-optimized Markdown."
     )
     parser.add_argument(
         "files",

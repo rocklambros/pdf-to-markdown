@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Plain text (.txt) file conversion with heuristic structure detection (headings, lists, code blocks, separators)
 - HTML file conversion (.html, .htm) with BeautifulSoup pre-cleaning, trafilatura content extraction, and markdownify fallback
 - URL fetching — convert web pages directly by passing a URL as a positional argument
 - `--strip-links` flag to remove markdown hyperlinks from output, keeping only link text
@@ -19,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - Refactored from single-file (`any2md.py`) to package architecture
 - `any2md.py` is now a thin wrapper for backward compatibility
-- Updated `SUPPORTED_EXTENSIONS` to include `.html` and `.htm`
+- Updated `SUPPORTED_EXTENSIONS` to include `.html`, `.htm`, and `.txt`
 
 ### Dependencies
 - Added `trafilatura` for HTML content extraction and URL fetching
