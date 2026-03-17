@@ -51,6 +51,12 @@ def main():
         help="Remove markdown links, keeping only the link text.",
     )
     parser.add_argument(
+        "--recursive",
+        "-r",
+        action="store_true",
+        help="Recursively scan subdirectories for supported files.",
+    )
+    parser.add_argument(
         "--max-file-size",
         type=int,
         default=_DEFAULT_MAX_FILE_SIZE,
@@ -89,12 +95,14 @@ def main():
         if not args.input_dir.is_dir():
             print(f"Error: not a directory: {args.input_dir}", file=sys.stderr)
             sys.exit(1)
+        glob_method = args.input_dir.rglob if args.recursive else args.input_dir.glob
         file_paths = sorted(
-            p for ext in SUPPORTED_EXTENSIONS for p in args.input_dir.glob(f"*{ext}")
+            p for ext in SUPPORTED_EXTENSIONS for p in glob_method(f"*{ext}")
         )
     else:
+        glob_method = script_dir.rglob if args.recursive else script_dir.glob
         file_paths = sorted(
-            p for ext in SUPPORTED_EXTENSIONS for p in script_dir.glob(f"*{ext}")
+            p for ext in SUPPORTED_EXTENSIONS for p in glob_method(f"*{ext}")
         )
 
     if not file_paths and not urls:
