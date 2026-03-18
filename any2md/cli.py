@@ -23,7 +23,8 @@ def main():
     parser.add_argument(
         "files",
         nargs="*",
-        help="Files or URLs to convert. Supports PDF, DOCX, HTML files and http(s) URLs. "
+        help="Files, directories, or URLs to convert. Supports PDF, DOCX, HTML files and http(s) URLs. "
+        "Directories are scanned for supported files (use -r to include subdirectories). "
         "If omitted, converts all supported files in the current directory.",
     )
     parser.add_argument(
@@ -86,6 +87,16 @@ def main():
                 p = Path.cwd() / p
             if not p.exists():
                 print(f"  NOT FOUND: {f}", file=sys.stderr)
+                continue
+            if p.is_dir():
+                glob_method = p.rglob if args.recursive else p.glob
+                file_paths.extend(
+                    sorted(
+                        fp
+                        for ext in SUPPORTED_EXTENSIONS
+                        for fp in glob_method(f"*{ext}")
+                    )
+                )
                 continue
             if p.suffix.lower() not in SUPPORTED_EXTENSIONS:
                 print(f"  UNSUPPORTED FORMAT: {f}", file=sys.stderr)
