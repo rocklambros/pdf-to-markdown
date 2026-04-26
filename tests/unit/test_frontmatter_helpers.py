@@ -58,3 +58,46 @@ def test_chunk_level_h3_when_any_section_exceeds_1500_tokens():
     big = "x" * 6500
     body = f"# Title\n\n## A\n\n{big}\n\n## B\n\nshort\n"
     assert recommend_chunk_level(body) == "h3"
+
+
+from any2md.frontmatter import extract_abstract
+
+
+def test_abstract_first_paragraph_after_h1():
+    body = (
+        "# Title\n\n"
+        "This is the first paragraph and is reasonably long enough to be "
+        "considered an abstract candidate.\n\n"
+        "Second paragraph should be ignored.\n"
+    )
+    abstract = extract_abstract(body)
+    assert abstract is not None
+    assert "first paragraph" in abstract
+    assert "Second paragraph" not in abstract
+
+
+def test_abstract_skips_short_paragraphs():
+    body = (
+        "# Title\n\n"
+        "short.\n\n"
+        "This is a longer paragraph that should be picked because it exceeds "
+        "the 80 character minimum threshold for the abstract heuristic.\n"
+    )
+    abstract = extract_abstract(body)
+    assert abstract is not None
+    assert "longer paragraph" in abstract
+
+
+def test_abstract_truncates_at_400_chars_at_sentence_boundary():
+    long_para = "Sentence one is here. " * 30  # ~660 chars
+    body = f"# Title\n\n{long_para}\n"
+    abstract = extract_abstract(body)
+    assert abstract is not None
+    assert len(abstract) <= 400
+    assert abstract.endswith(".")
+
+
+def test_abstract_returns_none_when_no_paragraph_after_h1():
+    body = "# Title\n\n## Section\n\nbody under section.\n"
+    # No bare paragraph between H1 and the next heading.
+    assert extract_abstract(body) is None

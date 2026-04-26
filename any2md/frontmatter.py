@@ -67,3 +67,37 @@ def recommend_chunk_level(body: str) -> str:
         if estimate_tokens(section) > 1500:
             return "h3"
     return "h2"
+
+
+_H1_LINE_RE = re.compile(r"^#\s+\S.*$", re.MULTILINE)
+_HEADING_LINE_RE = re.compile(r"^#{1,6}\s+\S")
+
+
+def extract_abstract(body: str) -> str | None:
+    """First non-heading paragraph >= 80 chars after H1, capped at 400.
+
+    Returns None if no qualifying paragraph exists. Spec §3.2.
+    """
+    h1 = _H1_LINE_RE.search(body)
+    if not h1:
+        return None
+
+    # Walk paragraphs after the H1 (split on blank lines).
+    after = body[h1.end():]
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", after)]
+    for para in paragraphs:
+        if not para:
+            continue
+        if _HEADING_LINE_RE.match(para):
+            continue
+        if len(para) < 80:
+            continue
+        # Truncate at last sentence boundary <= 400.
+        if len(para) <= 400:
+            return para
+        head = para[:400]
+        last_dot = head.rfind(".")
+        if last_dot >= 80:
+            return head[: last_dot + 1]
+        return head.rstrip() + "..."
+    return None
