@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import date as _date_cls
 from typing import Any, Literal
 
+from any2md import heuristics
 from any2md.pipeline import Lane, PipelineOptions
 
 
@@ -190,11 +191,33 @@ def _build_fields(
     can tell "absent" apart from "blank".
     """
     fallback = meta.source_file or meta.source_url or "untitled"
-    title = derive_title(body, meta.title_hint, fallback)
+    title_raw = derive_title(body, meta.title_hint, fallback)
+    arxiv_id = heuristics.is_arxiv_filename(meta.source_file or "")
+    title = heuristics.refine_title(
+        title_raw, body,
+        source_url=meta.source_url,
+        profile=options.profile,
+    )
     content_hash = compute_content_hash(body)
     token_est = estimate_tokens(body)
     chunk_level = recommend_chunk_level(body)
-    abstract = extract_abstract(body) if token_est >= 500 else None
+    abstract_raw = extract_abstract(body) if token_est >= 500 else None
+    abstract = (
+        heuristics.refine_abstract(abstract_raw, body, profile=options.profile)
+        if token_est >= 500
+        else None
+    )
+    # Author chain — only invoke heuristics when meta.authors is empty.
+    # Caller-supplied authors (e.g. from extractor metadata) take priority.
+    authors = list(meta.authors)
+    if not authors:
+        authors = heuristics.extract_authors(
+            body,
+            title_hint=meta.title_hint,
+            arxiv_id=arxiv_id,
+            arxiv_lookup_enabled=options.arxiv_lookup,
+            profile=options.profile,
+        )
     today = _date_cls.today().isoformat()
     fm_date = meta.date or today
 
@@ -215,7 +238,7 @@ def _build_fields(
     fields["status"] = "draft"
     fields["document_type"] = ""
     fields["content_domain"] = []
-    fields["authors"] = list(meta.authors)
+    fields["authors"] = authors
     fields["organization"] = meta.organization or ""
     fields["generation_metadata"] = {"authored_by": "unknown"}
     fields["content_hash"] = content_hash
