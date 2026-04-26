@@ -81,6 +81,38 @@ def repair_line_wraps(text: str, _options: "PipelineOptions") -> str:
     return "\n".join(out)
 
 
+_HYPHEN_WRAP_RE = re.compile(r"([a-z]+)-\n([a-z]+)")
+
+
+def dehyphenate(text: str, _options: "PipelineOptions") -> str:
+    """T2: Merge soft-hyphenated word breaks across line ends.
+
+    Conservative — only merges when the joined word appears elsewhere
+    (same-doc corroboration). Avoids breaking compound words like
+    'co-pilot' that appear hyphenated genuinely.
+    """
+    # Find candidates first
+    candidates = list(_HYPHEN_WRAP_RE.finditer(text))
+    if not candidates:
+        return text
+
+    # Build set of words that appear in the text (lowercase, alphanumeric)
+    words_in_doc = set(re.findall(r"\b[a-z]+\b", text.lower()))
+
+    def _replace(match: re.Match[str]) -> str:
+        prefix_word = match.group(1)
+        suffix_word = match.group(2)
+        # The full word that would result if we merge
+        joined = prefix_word + suffix_word
+        # Look up: does the joined-form appear elsewhere in the doc?
+        if joined.lower() in words_in_doc:
+            return prefix_word + suffix_word
+        return match.group(0)  # keep hyphen + newline
+
+    return _HYPHEN_WRAP_RE.sub(_replace, text)
+
+
 STAGES: list[Stage] = [
     repair_line_wraps,
+    dehyphenate,
 ]
