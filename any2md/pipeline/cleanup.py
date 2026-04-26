@@ -16,6 +16,12 @@ def nfc_normalize(text: str, _options: "PipelineOptions") -> str:
     return unicodedata.normalize("NFC", text)
 
 
+def strip_soft_hyphens(text: str, _options: "PipelineOptions") -> str:
+    """C2: Remove U+00AD soft hyphen. Frequent PDF artifact."""
+    return text.replace("­", "")
+
+
 STAGES: list[Stage] = [
     nfc_normalize,
+    strip_soft_hyphens,
 ]
