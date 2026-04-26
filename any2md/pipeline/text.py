@@ -112,6 +112,28 @@ def dehyphenate(text: str, _options: "PipelineOptions") -> str:
     return _HYPHEN_WRAP_RE.sub(_replace, text)
 
 
+_AUTHOR_CONTACT_RE = re.compile(
+    r"^Author(?:'s|s'?)\s*Contact Information:.*$",
+    re.IGNORECASE,
+)
+_CONTACT_EMAIL_RE = re.compile(r"^Contact:.*@.*\..*$", re.IGNORECASE)
+
+
+def strip_repeated_byline(text: str, options: "PipelineOptions") -> str:
+    """T9: Remove 'Author's Contact Information:' duplicate-byline lines."""
+    if options.profile not in ("aggressive", "maximum"):
+        return text
+    lines = text.split("\n")
+    out: list[str] = []
+    for i, line in enumerate(lines):
+        if _AUTHOR_CONTACT_RE.match(line):
+            continue
+        if i < 50 and _CONTACT_EMAIL_RE.match(line):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 _PARA_SPLIT_RE = re.compile(r"\n\s*\n")
 
 
@@ -407,6 +429,7 @@ def strip_cover_artifacts(text: str, options: "PipelineOptions") -> str:
 STAGES: list[Stage] = [
     repair_line_wraps,
     dehyphenate,
+    strip_repeated_byline,
     dedupe_paragraphs,
     dedupe_toc_block,
     dedupe_toc_table,
