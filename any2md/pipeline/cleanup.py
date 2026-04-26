@@ -73,10 +73,38 @@ def collapse_whitespace(text: str, _options: "PipelineOptions") -> str:
     return text
 
 
+_INLINE_FN_RE = re.compile(
+    r"\[\^(?:\d+|[a-zA-Z][a-zA-Z0-9_-]*)\]"     # [^1] [^note] (markdown footnote refs)
+    r"|[¹²³⁰-⁹]"        # superscript digits ¹ ² ³ ⁰-⁹
+)
+_FOOTNOTES_HEADING_RE = re.compile(
+    r"^#{1,3}\s+(footnotes?|notes?|references?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def strip_footnote_markers(text: str, options: "PipelineOptions") -> str:
+    """C6: Strip inline footnote markers in body; keep footnotes section.
+
+    Aggressive and maximum profiles only. No-op when no recognizable
+    footnotes section exists.
+    """
+    if options.profile not in ("aggressive", "maximum"):
+        return text
+    m = _FOOTNOTES_HEADING_RE.search(text)
+    if not m:
+        return text
+    body = text[: m.start()]
+    tail = text[m.start():]
+    body = _INLINE_FN_RE.sub("", body)
+    return body + tail
+
+
 STAGES: list[Stage] = [
     nfc_normalize,
     strip_soft_hyphens,
     normalize_ligatures,
     normalize_quotes_dashes,
     collapse_whitespace,
+    strip_footnote_markers,
 ]
