@@ -180,6 +180,95 @@ def dedupe_toc_block(text: str, options: "PipelineOptions") -> str:
     return "\n".join(lines[end:]).lstrip("\n")
 
 
+_TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$")
+_TABLE_SEP_RE = re.compile(r"^\s*\|[\s\-:|]+\|\s*$")
+
+
+def _split_table_cells(line: str) -> list[str]:
+    """Split a table row into cell text values (no leading/trailing pipes)."""
+    stripped = line.strip()
+    if stripped.startswith("|"):
+        stripped = stripped[1:]
+    if stripped.endswith("|"):
+        stripped = stripped[:-1]
+    return [c.strip() for c in stripped.split("|")]
+
+
+def dedupe_toc_table(text: str, options: "PipelineOptions") -> str:
+    """T7: Strip leading table-formatted TOC when entries mirror later headings.
+
+    Aggressive/maximum profiles only. Only acts on tables in the first 30%
+    of the document.
+    """
+    if options.profile not in ("aggressive", "maximum"):
+        return text
+
+    lines = text.split("\n")
+    if not lines:
+        return text
+
+    cutoff = max(1, int(len(lines) * 0.3))
+
+    # Find first table block within the first 30% of the doc.
+    i = 0
+    while i < cutoff:
+        if _TABLE_ROW_RE.match(lines[i]):
+            tbl_start = i
+            j = i
+            while j < len(lines) and _TABLE_ROW_RE.match(lines[j]):
+                j += 1
+            tbl_end = j  # exclusive
+
+            # Need at least 4 data rows (besides header + separator).
+            block = lines[tbl_start:tbl_end]
+            if len(block) < 6:  # header + sep + 4 rows minimum
+                i = tbl_end if tbl_end > i else i + 1
+                continue
+
+            # Identify the separator row (often row index 1).
+            data_rows = []
+            for row in block:
+                if _TABLE_SEP_RE.match(row):
+                    continue
+                data_rows.append(row)
+            # First data row is treated as header; remaining are entries.
+            if len(data_rows) < 5:
+                i = tbl_end if tbl_end > i else i + 1
+                continue
+            entry_rows = data_rows[1:]
+            if len(entry_rows) < 4:
+                i = tbl_end if tbl_end > i else i + 1
+                continue
+
+            # Extract title text from non-numeric cells.
+            toc_titles: set[str] = set()
+            for row in entry_rows:
+                cells = _split_table_cells(row)
+                for cell in cells:
+                    if cell and not cell.replace(".", "").isdigit():
+                        toc_titles.add(cell.lower())
+            if not toc_titles:
+                i = tbl_end if tbl_end > i else i + 1
+                continue
+
+            # Compare to H2/H3 headings AFTER the table.
+            body_after = "\n".join(lines[tbl_end:])
+            body_titles = {
+                m.group(1).strip().lower()
+                for m in _BODY_HEADING_RE.finditer(body_after)
+            }
+            overlap = len(toc_titles & body_titles) / len(toc_titles)
+            if overlap >= 0.7:
+                # Drop the entire table block (keep surrounding blank line cleanup).
+                new_lines = lines[:tbl_start] + lines[tbl_end:]
+                # Trim a single leading blank if it now sits between two blanks.
+                return "\n".join(new_lines)
+            i = tbl_end if tbl_end > i else i + 1
+            continue
+        i += 1
+    return text
+
+
 _PAGE_NUM_RE = re.compile(r"^Page \d+ of \d+\s*$")
 _BARE_NUM_RE = re.compile(r"^\d+\s*$")
 
@@ -286,6 +375,7 @@ STAGES: list[Stage] = [
     dehyphenate,
     dedupe_paragraphs,
     dedupe_toc_block,
+    dedupe_toc_table,
     strip_running_headers_footers,
     restore_lists_and_code,
 ]
