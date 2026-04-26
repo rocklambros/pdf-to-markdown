@@ -62,6 +62,11 @@ class SourceMeta:
         "trafilatura", "trafilatura+bs4_fallback", "heuristic",
     ]
     lane: Lane
+    # v1.0.2: software/tool that produced the source (PDF Creator field for
+    # PDFs, Application field for DOCX). Distinct from `organization`, which
+    # is the human/legal entity. Default None to keep existing call sites
+    # working without churn.
+    produced_by: str | None = None
 
 
 def estimate_tokens(body: str) -> int:
@@ -227,6 +232,8 @@ def _build_fields(
         fields["source_url"] = meta.source_url
     fields["type"] = meta.doc_type           # v0.7-compat field (spec §3.2)
     fields["extracted_via"] = meta.extracted_via  # v1.0 provenance extension
+    if meta.produced_by is not None:
+        fields["produced_by"] = meta.produced_by  # v1.0.2 extension (spec §6.1)
     if meta.pages is not None:
         fields["pages"] = meta.pages
     if meta.word_count is not None:

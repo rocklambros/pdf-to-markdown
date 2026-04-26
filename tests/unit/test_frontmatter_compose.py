@@ -136,3 +136,23 @@ def test_compose_deterministic_for_same_input():
     a = compose(body, _meta(date="2026-04-26"), PipelineOptions())
     b = compose(body, _meta(date="2026-04-26"), PipelineOptions())
     assert a == b
+
+
+def test_compose_emits_produced_by_when_set():
+    out = compose(
+        "# T\n\nbody\n",
+        _meta(produced_by="Adobe InDesign 16.2"),
+        PipelineOptions(),
+    )
+    fm, _ = _split_frontmatter(out)
+    assert fm["produced_by"] == "Adobe InDesign 16.2"
+
+
+def test_compose_omits_produced_by_when_none():
+    out = compose(
+        "# T\n\nbody\n",
+        _meta(produced_by=None),
+        PipelineOptions(),
+    )
+    fm, _ = _split_frontmatter(out)
+    assert "produced_by" not in fm
