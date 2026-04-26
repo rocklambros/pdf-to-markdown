@@ -4,6 +4,67 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.2] — 2026-04-26
+
+Patch release. Closes issue #15 plus 8 additional quality issues
+discovered during deep investigation against four real-world inputs:
+arxiv academic paper, ISO/IEC 27002 standard, COMP4441 academic
+DOCX, and a Wikipedia article via URL.
+
+### Added
+- New `any2md/heuristics.py` module — pure functions for frontmatter
+  field refinement: `refine_title`, `refine_abstract`, `extract_authors`,
+  `filter_organization`, `arxiv_lookup`, `is_arxiv_filename`. Called
+  from `frontmatter.compose()` and from converter modules.
+- New `produced_by` extension field on `SourceMeta` and frontmatter
+  (between `extracted_via` and `pages`). Records the software that
+  produced the source file (PDF `Creator`, DOCX `Application`).
+  Distinct from `extracted_via` which records the any2md backend
+  that produced the markdown.
+- New shared cleanup stage **C8 `decode_html_entities`** — universal
+  removal of `&amp;`, `&gt;`, `&lt;`, numeric entities (`&#x2014;`,
+  `&#8212;`) from body. Code-block aware (skips fenced ` ``` ` blocks).
+- New text-lane stages T7-T10 (aggressive/maximum profile only):
+  - **T7 `dedupe_toc_table`** — strips table-formatted TOCs that T4's
+    text-formatted-TOC heuristic doesn't catch. Common in academic PDFs.
+  - **T8 `strip_cover_artifacts`** — drops cover-page noise (QR-code
+    blurbs, version stamps like "Third edition 2022-02") in the first
+    ~30 lines, before the first H2.
+  - **T9 `strip_repeated_byline`** — removes "Author's Contact
+    Information:" and similar lines that duplicate a byline.
+  - **T10 `strip_web_fragments`** — drops trafilatura extraction
+    fragments (orphan `|` / `>` lines, short incomplete sentences
+    surrounded by blank lines).
+- New CLI flag `--no-arxiv-lookup` to disable the arxiv API metadata
+  enrichment. Arxiv enrichment is on by default for filenames matching
+  `\d{4}\.\d{4,5}` (e.g., `2501.17755v1.pdf`); SSRF-guarded with 5s
+  timeout; failures emit non-blocking warnings.
+- Project logo and brand assets under `assets/`.
+
+### Fixes
+The eleven quality issues — see issue #15 and
+`docs/superpowers/specs/2026-04-26-any2md-v1.0.2-design.md`:
+- A1: authors not extracted from PDF body byline (academic PDFs).
+- A2: abstract picked the byline / cover blurb / TOC line.
+- A3: organization populated with PDF Creator software junk.
+- B1: HTML entities leaked to body universally.
+- C1: ISO/TR titles detected as "INTERNATIONAL STANDARD" cover header.
+- C3: DOCX titles concatenated course code + project title.
+- C4: Wikipedia titles kept "Wikipedia:" namespace prefix.
+- D1: TOCs dumped as markdown tables in academic PDFs.
+- D2: trafilatura fragments leaked into web outputs.
+- D3: ISO cover-page QR-code blurb leaked into body.
+- E1: "Author's Contact Information:" line duplicated byline.
+
+### Changed
+- `frontmatter.compose()` now consults `heuristics.py` to refine
+  title / abstract / authors before YAML emission.
+- `--profile conservative` now also gates the new heuristic
+  aggressiveness (skip-lists active; speculative inferences off).
+- PDF `Creator` software values (LaTeX, acmart, Adobe InDesign,
+  Microsoft Word, etc.) no longer populate `organization`. They
+  go to the new `produced_by` field instead.
+
 ## [1.0.1] — 2026-04-26
 
 Patch release. Adds an explicit backend-selection CLI flag.

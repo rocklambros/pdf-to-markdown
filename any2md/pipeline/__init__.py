@@ -43,6 +43,12 @@ class PipelineOptions:
     # supplied values replace derived fields. ``None`` means "no
     # overrides" (the common case).
     frontmatter_overrides: dict[str, Any] | None = field(default=None)
+    # v1.0.2: when True (default), the heuristics author-extraction chain
+    # is allowed to call the public arxiv API to enrich frontmatter for
+    # PDFs whose filename matches the arxiv ID pattern. Set to False via
+    # ``--no-arxiv-lookup`` to disable the network call (airgapped envs
+    # or when offline behavior is required).
+    arxiv_lookup: bool = True
 
 
 Stage = Callable[[str, PipelineOptions], str]

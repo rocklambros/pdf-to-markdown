@@ -136,3 +136,72 @@ def test_compose_deterministic_for_same_input():
     a = compose(body, _meta(date="2026-04-26"), PipelineOptions())
     b = compose(body, _meta(date="2026-04-26"), PipelineOptions())
     assert a == b
+
+
+def test_compose_emits_produced_by_when_set():
+    out = compose(
+        "# T\n\nbody\n",
+        _meta(produced_by="Adobe InDesign 16.2"),
+        PipelineOptions(),
+    )
+    fm, _ = _split_frontmatter(out)
+    assert fm["produced_by"] == "Adobe InDesign 16.2"
+
+
+def test_compose_omits_produced_by_when_none():
+    out = compose(
+        "# T\n\nbody\n",
+        _meta(produced_by=None),
+        PipelineOptions(),
+    )
+    fm, _ = _split_frontmatter(out)
+    assert "produced_by" not in fm
+
+
+def test_compose_uses_heuristics_refine_title():
+    """Cover-page boilerplate H1 is replaced by the first H2."""
+    body = "# INTERNATIONAL STANDARD\n\n## Real Title\n\nSome content here.\n"
+    out = compose(body, _meta(), PipelineOptions())
+    fm, _ = _split_frontmatter(out)
+    assert fm["title"] == "Real Title"
+
+
+def test_compose_uses_heuristics_refine_abstract():
+    """Byline-style first paragraph is skipped in favor of an explicit
+    '## Abstract' section's content."""
+    # Build a body long enough to clear the 500-token threshold so that
+    # extract_abstract / refine_abstract actually run.
+    real_abstract = (
+        "This is the genuine abstract paragraph that explains what the "
+        "paper is about and contains enough characters to satisfy the "
+        "minimum length requirement of eighty characters."
+    )
+    filler = "Section content. " * 200
+    body = (
+        "# Paper Title\n\n"
+        "JANE DOE1, JOHN SMITH2, AUTHOR THREE3, contact@example.com\n\n"
+        "## Abstract\n\n"
+        f"{real_abstract}\n\n"
+        "## Introduction\n\n"
+        f"{filler}\n"
+    )
+    out = compose(body, _meta(), PipelineOptions())
+    fm, _ = _split_frontmatter(out)
+    assert fm.get("abstract_for_rag")
+    assert "genuine abstract paragraph" in fm["abstract_for_rag"]
+
+
+def test_compose_extract_authors_when_meta_empty():
+    """When meta.authors is empty, the heuristics chain extracts from body."""
+    body = "# Paper Title\n\nAuthors: Alice, Bob\n\nMore body content.\n"
+    out = compose(body, _meta(authors=[]), PipelineOptions())
+    fm, _ = _split_frontmatter(out)
+    assert fm["authors"] == ["Alice", "Bob"]
+
+
+def test_compose_meta_authors_takes_priority():
+    """When meta.authors is non-empty, body byline is ignored."""
+    body = "# Paper Title\n\nAuthors: Alice\n\nMore body content.\n"
+    out = compose(body, _meta(authors=["Bob"]), PipelineOptions())
+    fm, _ = _split_frontmatter(out)
+    assert fm["authors"] == ["Bob"]

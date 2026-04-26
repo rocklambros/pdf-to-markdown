@@ -112,6 +112,28 @@ def dehyphenate(text: str, _options: "PipelineOptions") -> str:
     return _HYPHEN_WRAP_RE.sub(_replace, text)
 
 
+_AUTHOR_CONTACT_RE = re.compile(
+    r"^Author(?:'s|s'?)\s*Contact Information:.*$",
+    re.IGNORECASE,
+)
+_CONTACT_EMAIL_RE = re.compile(r"^Contact:.*@.*\..*$", re.IGNORECASE)
+
+
+def strip_repeated_byline(text: str, options: "PipelineOptions") -> str:
+    """T9: Remove 'Author's Contact Information:' duplicate-byline lines."""
+    if options.profile not in ("aggressive", "maximum"):
+        return text
+    lines = text.split("\n")
+    out: list[str] = []
+    for i, line in enumerate(lines):
+        if _AUTHOR_CONTACT_RE.match(line):
+            continue
+        if i < 50 and _CONTACT_EMAIL_RE.match(line):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 _PARA_SPLIT_RE = re.compile(r"\n\s*\n")
 
 
@@ -180,6 +202,95 @@ def dedupe_toc_block(text: str, options: "PipelineOptions") -> str:
     return "\n".join(lines[end:]).lstrip("\n")
 
 
+_TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$")
+_TABLE_SEP_RE = re.compile(r"^\s*\|[\s\-:|]+\|\s*$")
+
+
+def _split_table_cells(line: str) -> list[str]:
+    """Split a table row into cell text values (no leading/trailing pipes)."""
+    stripped = line.strip()
+    if stripped.startswith("|"):
+        stripped = stripped[1:]
+    if stripped.endswith("|"):
+        stripped = stripped[:-1]
+    return [c.strip() for c in stripped.split("|")]
+
+
+def dedupe_toc_table(text: str, options: "PipelineOptions") -> str:
+    """T7: Strip leading table-formatted TOC when entries mirror later headings.
+
+    Aggressive/maximum profiles only. Only acts on tables in the first 30%
+    of the document.
+    """
+    if options.profile not in ("aggressive", "maximum"):
+        return text
+
+    lines = text.split("\n")
+    if not lines:
+        return text
+
+    cutoff = max(1, int(len(lines) * 0.3))
+
+    # Find first table block within the first 30% of the doc.
+    i = 0
+    while i < cutoff:
+        if _TABLE_ROW_RE.match(lines[i]):
+            tbl_start = i
+            j = i
+            while j < len(lines) and _TABLE_ROW_RE.match(lines[j]):
+                j += 1
+            tbl_end = j  # exclusive
+
+            # Need at least 4 data rows (besides header + separator).
+            block = lines[tbl_start:tbl_end]
+            if len(block) < 6:  # header + sep + 4 rows minimum
+                i = tbl_end if tbl_end > i else i + 1
+                continue
+
+            # Identify the separator row (often row index 1).
+            data_rows = []
+            for row in block:
+                if _TABLE_SEP_RE.match(row):
+                    continue
+                data_rows.append(row)
+            # First data row is treated as header; remaining are entries.
+            if len(data_rows) < 5:
+                i = tbl_end if tbl_end > i else i + 1
+                continue
+            entry_rows = data_rows[1:]
+            if len(entry_rows) < 4:
+                i = tbl_end if tbl_end > i else i + 1
+                continue
+
+            # Extract title text from non-numeric cells.
+            toc_titles: set[str] = set()
+            for row in entry_rows:
+                cells = _split_table_cells(row)
+                for cell in cells:
+                    if cell and not cell.replace(".", "").isdigit():
+                        toc_titles.add(cell.lower())
+            if not toc_titles:
+                i = tbl_end if tbl_end > i else i + 1
+                continue
+
+            # Compare to H2/H3 headings AFTER the table.
+            body_after = "\n".join(lines[tbl_end:])
+            body_titles = {
+                m.group(1).strip().lower()
+                for m in _BODY_HEADING_RE.finditer(body_after)
+            }
+            overlap = len(toc_titles & body_titles) / len(toc_titles)
+            if overlap >= 0.7:
+                # Drop the entire table block (keep surrounding blank line cleanup).
+                new_lines = lines[:tbl_start] + lines[tbl_end:]
+                # Trim a single leading blank if it now sits between two blanks.
+                return "\n".join(new_lines)
+            i = tbl_end if tbl_end > i else i + 1
+            continue
+        i += 1
+    return text
+
+
 _PAGE_NUM_RE = re.compile(r"^Page \d+ of \d+\s*$")
 _BARE_NUM_RE = re.compile(r"^\d+\s*$")
 
@@ -234,6 +345,44 @@ def strip_running_headers_footers(text: str, _options: "PipelineOptions") -> str
     return "\f".join(out_pages)
 
 
+_ORPHAN_PUNCT_RE = re.compile(r"^\s*[|>]+\s*$")
+_TERMINAL_PUNCT_RE = re.compile(r"[.!?:;]$")
+_HEADING_OR_KNOWN_SHORT_RE = re.compile(
+    r"^(Contents|References|Appendix|Notes|Note:|Index|Glossary|"
+    r"Acknowledgments|Abstract|Summary)\s*$",
+    re.IGNORECASE,
+)
+
+
+def strip_web_fragments(text: str, options: "PipelineOptions") -> str:
+    """T10: Drop trafilatura extraction fragments (orphan chars, incomplete sentences)."""
+    if options.profile not in ("aggressive", "maximum"):
+        return text
+    lines = text.split("\n")
+    out: list[str] = []
+    n = len(lines)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        # Orphan punctuation
+        if _ORPHAN_PUNCT_RE.match(line):
+            continue
+        # Short incomplete sentence between blank lines
+        if (
+            stripped
+            and len(stripped) <= 25
+            and not _TERMINAL_PUNCT_RE.search(stripped)
+            and not _HEADING_OR_KNOWN_SHORT_RE.match(stripped)
+            and not stripped.startswith("#")
+            and not stripped.startswith("-")
+            and not stripped.startswith("|")
+            and (i == 0 or not lines[i - 1].strip())
+            and (i == n - 1 or not lines[i + 1].strip())
+        ):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 def restore_lists_and_code(text: str, _options: "PipelineOptions") -> str:
     """T6: Wrap ≥4-line indented blocks (4 spaces or tab) in fenced code.
 
@@ -281,11 +430,49 @@ def restore_lists_and_code(text: str, _options: "PipelineOptions") -> str:
     return "\n".join(out)
 
 
+_COVER_KEYWORDS = re.compile(
+    r"qr code|scan the|customer feedback form|please share your feedback",
+    re.IGNORECASE,
+)
+_EDITION_RE = re.compile(
+    r"^(?:[A-Z][a-z]+|\d+(?:st|nd|rd|th))\s+edition\s+\d{4}-\d{2}\s*$"
+)
+_CORRECTED_RE = re.compile(r"^Corrected version \d{4}-\d{2}\s*$")
+_FIRST_H2_RE = re.compile(r"^## ")
+
+
+def strip_cover_artifacts(text: str, options: "PipelineOptions") -> str:
+    """T8: Drop cover-page noise (QR blurbs, version stamps) in first 30 lines."""
+    if options.profile not in ("aggressive", "maximum"):
+        return text
+    lines = text.split("\n")
+    out: list[str] = []
+    seen_h2 = False
+    for i, line in enumerate(lines):
+        if _FIRST_H2_RE.match(line):
+            seen_h2 = True
+        if seen_h2 or i > 30:
+            out.append(line)
+            continue
+        if (
+            _COVER_KEYWORDS.search(line)
+            or _EDITION_RE.match(line)
+            or _CORRECTED_RE.match(line)
+        ):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 STAGES: list[Stage] = [
     repair_line_wraps,
     dehyphenate,
+    strip_repeated_byline,
     dedupe_paragraphs,
     dedupe_toc_block,
+    dedupe_toc_table,
     strip_running_headers_footers,
+    strip_web_fragments,
     restore_lists_and_code,
+    strip_cover_artifacts,
 ]

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import date as _date_cls
 from typing import Any, Literal
 
+from any2md import heuristics
 from any2md.pipeline import Lane, PipelineOptions
 
 
@@ -62,6 +63,11 @@ class SourceMeta:
         "trafilatura", "trafilatura+bs4_fallback", "heuristic",
     ]
     lane: Lane
+    # v1.0.2: software/tool that produced the source (PDF Creator field for
+    # PDFs, Application field for DOCX). Distinct from `organization`, which
+    # is the human/legal entity. Default None to keep existing call sites
+    # working without churn.
+    produced_by: str | None = None
 
 
 def estimate_tokens(body: str) -> int:
@@ -185,11 +191,33 @@ def _build_fields(
     can tell "absent" apart from "blank".
     """
     fallback = meta.source_file or meta.source_url or "untitled"
-    title = derive_title(body, meta.title_hint, fallback)
+    title_raw = derive_title(body, meta.title_hint, fallback)
+    arxiv_id = heuristics.is_arxiv_filename(meta.source_file or "")
+    title = heuristics.refine_title(
+        title_raw, body,
+        source_url=meta.source_url,
+        profile=options.profile,
+    )
     content_hash = compute_content_hash(body)
     token_est = estimate_tokens(body)
     chunk_level = recommend_chunk_level(body)
-    abstract = extract_abstract(body) if token_est >= 500 else None
+    abstract_raw = extract_abstract(body) if token_est >= 500 else None
+    abstract = (
+        heuristics.refine_abstract(abstract_raw, body, profile=options.profile)
+        if token_est >= 500
+        else None
+    )
+    # Author chain — only invoke heuristics when meta.authors is empty.
+    # Caller-supplied authors (e.g. from extractor metadata) take priority.
+    authors = list(meta.authors)
+    if not authors:
+        authors = heuristics.extract_authors(
+            body,
+            title_hint=meta.title_hint,
+            arxiv_id=arxiv_id,
+            arxiv_lookup_enabled=options.arxiv_lookup,
+            profile=options.profile,
+        )
     today = _date_cls.today().isoformat()
     fm_date = meta.date or today
 
@@ -210,7 +238,7 @@ def _build_fields(
     fields["status"] = "draft"
     fields["document_type"] = ""
     fields["content_domain"] = []
-    fields["authors"] = list(meta.authors)
+    fields["authors"] = authors
     fields["organization"] = meta.organization or ""
     fields["generation_metadata"] = {"authored_by": "unknown"}
     fields["content_hash"] = content_hash
@@ -227,6 +255,8 @@ def _build_fields(
         fields["source_url"] = meta.source_url
     fields["type"] = meta.doc_type           # v0.7-compat field (spec §3.2)
     fields["extracted_via"] = meta.extracted_via  # v1.0 provenance extension
+    if meta.produced_by is not None:
+        fields["produced_by"] = meta.produced_by  # v1.0.2 extension (spec §6.1)
     if meta.pages is not None:
         fields["pages"] = meta.pages
     if meta.word_count is not None:

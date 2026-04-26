@@ -133,6 +133,14 @@ def main():
         help="Force the Docling backend (PDF/DOCX). Exit 1 if not installed.",
     )
     parser.add_argument(
+        "--no-arxiv-lookup",
+        action="store_true",
+        help="Disable the arxiv API lookup that enriches frontmatter for "
+             "PDFs whose filename matches the arxiv ID pattern (\\d{4}.\\d{4,5}). "
+             "Useful in airgapped envs or when you don't want any2md to make "
+             "network calls. Default: arxiv lookup is enabled.",
+    )
+    parser.add_argument(
         "--backend",
         choices=("docling", "pymupdf4llm", "mammoth"),
         default=None,
@@ -268,6 +276,7 @@ def main():
         auto_id_type_code=auto_id_type_code,
         frontmatter_overrides=overrides or None,
         backend=args.backend,
+        arxiv_lookup=not args.no_arxiv_lookup,
     )
 
     # CLI-only output controls (not part of PipelineOptions).

@@ -20,6 +20,7 @@ from any2md import pipeline
 from any2md._docling import has_docling, install_hint
 from any2md.converters import add_warnings, is_quiet
 from any2md.frontmatter import SourceMeta, compose
+from any2md.heuristics import filter_organization
 from any2md.pipeline import PipelineOptions
 from any2md.utils import sanitize_filename
 
@@ -47,10 +48,13 @@ def _parse_pdf_date(raw: str | None) -> str | None:
 
 def _parse_pdf_metadata(doc: "pymupdf.Document") -> dict[str, object]:
     meta = doc.metadata or {}
+    creator_raw = (meta.get("creator") or "").strip() or None
+    org_result = filter_organization(creator_raw)
     return {
         "title_hint": (meta.get("title") or "").strip() or None,
         "authors": _parse_pdf_authors(meta.get("author")),
-        "organization": (meta.get("creator") or "").strip() or None,
+        "organization": org_result.organization,
+        "produced_by": org_result.produced_by,
         "date": _parse_pdf_date(meta.get("creationDate")),
         "keywords": [
             k.strip() for k in (meta.get("keywords") or "").split(",") if k.strip()
@@ -256,6 +260,7 @@ def convert_pdf(
             doc_type="pdf",
             extracted_via=extracted_via,
             lane=lane,
+            produced_by=props["produced_by"],
         )
         full = compose(
             md_text, meta, options, overrides=options.frontmatter_overrides

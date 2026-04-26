@@ -52,3 +52,11 @@ def test_pipeline_options_backend_can_be_set():
     assert PipelineOptions(backend="docling").backend == "docling"
     assert PipelineOptions(backend="pymupdf4llm").backend == "pymupdf4llm"
     assert PipelineOptions(backend="mammoth").backend == "mammoth"
+
+
+def test_pipeline_options_arxiv_lookup_default_true():
+    assert PipelineOptions().arxiv_lookup is True
+
+
+def test_pipeline_options_arxiv_lookup_can_be_set_false():
+    assert PipelineOptions(arxiv_lookup=False).arxiv_lookup is False

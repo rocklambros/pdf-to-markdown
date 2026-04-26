@@ -31,6 +31,9 @@ def test_pdf_docling_emits_v1_frontmatter_structured_lane(fixture_dir, tmp_outpu
     assert fm["extracted_via"] == "docling"
     assert fm["pages"] == 2
     assert fm["content_hash"]
+    # v1.0.2: synthetic fixture's Creator is "anonymous" (not software),
+    # so produced_by is omitted.
+    assert "produced_by" not in fm
 
 
 def test_pdf_default_uses_docling_when_installed(fixture_dir, tmp_output_dir):

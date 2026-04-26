@@ -14,7 +14,7 @@ from any2md.frontmatter import (
 def test_source_meta_has_required_fields():
     fields = {f.name for f in dataclasses.fields(SourceMeta)}
     expected = {
-        "title_hint", "authors", "organization", "date",
+        "title_hint", "authors", "organization", "produced_by", "date",
         "keywords", "pages", "word_count", "source_file",
         "source_url", "extracted_via", "lane",
     }
