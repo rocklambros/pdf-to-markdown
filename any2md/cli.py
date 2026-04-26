@@ -70,13 +70,23 @@ def main():
         action="store_true",
         help="Force the Docling backend (PDF/DOCX). Exit 1 if not installed.",
     )
+    parser.add_argument(
+        "--ocr-figures",
+        action="store_true",
+        help="OCR text inside figures (PDF Docling path). Implies --high-fidelity.",
+    )
+    parser.add_argument(
+        "--save-images",
+        action="store_true",
+        help="Save extracted images to <output>/images/ and reference them. Implies --high-fidelity.",
+    )
     args = parser.parse_args()
 
-    if args.high_fidelity:
+    if args.high_fidelity or args.ocr_figures or args.save_images:
         from any2md._docling import has_docling, INSTALL_HINT_MSG
         if not has_docling():
             print(
-                f"  ERROR: --high-fidelity requested but docling is not installed.\n"
+                f"  ERROR: Docling required for --high-fidelity / --ocr-figures / --save-images.\n"
                 f"  {INSTALL_HINT_MSG}",
                 file=sys.stderr,
             )
@@ -84,7 +94,9 @@ def main():
 
     options = PipelineOptions(
         strip_links=args.strip_links,
-        high_fidelity=args.high_fidelity,
+        high_fidelity=args.high_fidelity or args.ocr_figures or args.save_images,
+        ocr_figures=args.ocr_figures,
+        save_images=args.save_images,
     )
 
     # Determine which files to process
