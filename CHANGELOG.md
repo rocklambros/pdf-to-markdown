@@ -4,6 +4,62 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.0rc1] — 2026-04-26
+
+Phase 4: configuration, polish, and the v1.0 documentation set.
+
+### Added
+- `--profile {conservative,aggressive,maximum}` flag — tunes minimization
+  aggressiveness. `conservative` skips TOC dedupe and footnote-marker
+  stripping; `aggressive` (default) runs the full pipeline; `maximum`
+  additionally implies `--strip-links`.
+- `--meta KEY=VAL` repeatable flag for frontmatter overrides. Dotted keys
+  set nested fields (e.g. `--meta generation_metadata.authored_by=human`);
+  comma-separated values become arrays
+  (e.g. `--meta authors="Alice, Bob"`).
+- `--meta-file PATH` flag plus auto-discovery of `.any2md.toml` (walks up
+  from cwd). The `[meta]` table supplies frontmatter overrides; the
+  `[document_id]` table supplies `--auto-id` prefix and type code.
+- `--auto-id` flag — generates an SSRM-conformant `document_id` as
+  `{PREFIX}-{YYYY}-{TYPE}-{SHA8}`. Defaults to `LOCAL`/`DOC`; override via
+  the `[document_id]` table in `.any2md.toml`.
+- `--strict` flag — promotes pipeline validation warnings (heading
+  hierarchy auto-fixes, missing H1, `content_hash` round-trip mismatches)
+  to a non-zero exit.
+- `--quiet` / `-q` flag — suppresses the per-file `OK:` lines. Errors and
+  the final summary still print.
+- `--verbose` / `-v` flag — adds per-file pipeline stage timings.
+- New exit code contract: `0` success, `1` usage or install error, `2` at
+  least one file failed entirely, `3` at least one file produced warnings
+  AND `--strict` was set.
+- Per-file summary line now includes backend, lane, token estimate, and
+  warning count when present.
+- New module `any2md/config.py` for `.any2md.toml` discovery and parsing
+  (uses stdlib `tomllib` on 3.11+, `tomli` on 3.10).
+- Comprehensive documentation set:
+  - `README.md` rewritten with educational tone — every command preceded
+    by why you'd run it and followed by what you'll see.
+  - `docs/output-format.md` — SSRM-compatible field reference and the
+    `content_hash` recomputation recipe.
+  - `docs/cli-reference.md` — flag-by-flag reference with use cases and a
+    worked-example matrix.
+  - `docs/architecture.md` — pipeline internals, stage catalog, and
+    contributor guide.
+  - `docs/troubleshooting.md` — symptom-cause-fix triage guide.
+  - `docs/upgrading-from-0.7.md` — migration guide.
+  - `CONTRIBUTING.md` — dev setup, test commands, coding standards,
+    release flow, PR process.
+  - GitHub issue templates: generic bug report, conversion quality.
+
+### Changed
+- `frontmatter.compose()` now accepts an `overrides: dict | None` argument
+  that deep-merges over derived fields. Used by `--meta`, `--meta-file`,
+  and `.any2md.toml`.
+- `cli.main()` exit-code logic refactored to track failures and
+  strict-mode warnings separately, via the new
+  `any2md.converters.collected_warnings()` helper.
+- `--profile maximum` implies `--strip-links` automatically.
+
 ## [1.0.0a3] — 2026-04-26
 
 Phase 3: text-lane post-processing stages and image/OCR flag wiring.
