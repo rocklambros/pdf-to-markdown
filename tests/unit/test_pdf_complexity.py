@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pymupdf
-import pytest
 
 from any2md.converters.pdf import pdf_looks_complex
 
