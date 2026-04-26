@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 import unicodedata
 from typing import Callable, TYPE_CHECKING
@@ -73,6 +74,26 @@ def collapse_whitespace(text: str, _options: "PipelineOptions") -> str:
     return text
 
 
+_FENCE_RE = re.compile(r"^```")
+
+
+def decode_html_entities(text: str, _options: "PipelineOptions") -> str:
+    """C8: Decode HTML entities outside fenced code blocks. Universal."""
+    lines = text.split("\n")
+    out: list[str] = []
+    in_fence = False
+    for line in lines:
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+        else:
+            out.append(html.unescape(line))
+    return "\n".join(out)
+
+
 _INLINE_FN_RE = re.compile(
     r"\[\^(?:\d+|[a-zA-Z][a-zA-Z0-9_-]*)\]"     # [^1] [^note] (markdown footnote refs)
     r"|[¹²³⁰-⁹]"        # superscript digits ¹ ² ³ ⁰-⁹
@@ -124,6 +145,7 @@ STAGES: list[Stage] = [
     normalize_ligatures,
     normalize_quotes_dashes,
     collapse_whitespace,
+    decode_html_entities,
     strip_footnote_markers,
     validate,
 ]
