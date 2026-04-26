@@ -112,7 +112,25 @@ def dehyphenate(text: str, _options: "PipelineOptions") -> str:
     return _HYPHEN_WRAP_RE.sub(_replace, text)
 
 
+_PARA_SPLIT_RE = re.compile(r"\n\s*\n")
+
+
+def dedupe_paragraphs(text: str, _options: "PipelineOptions") -> str:
+    """T3: Drop a paragraph identical to the immediately previous one."""
+    parts = _PARA_SPLIT_RE.split(text)
+    out: list[str] = []
+    last = None
+    for part in parts:
+        normalized = part.strip()
+        if normalized and normalized == last:
+            continue
+        out.append(part)
+        last = normalized
+    return "\n\n".join(out)
+
+
 STAGES: list[Stage] = [
     repair_line_wraps,
     dehyphenate,
+    dedupe_paragraphs,
 ]
