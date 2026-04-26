@@ -6,6 +6,12 @@ import time
 from pathlib import Path
 from typing import Any
 
+from any2md.config import (
+    discover_config,
+    extract_document_id_settings,
+    extract_meta_overrides,
+    load_toml,
+)
 from any2md.converters import (
     SUPPORTED_EXTENSIONS,
     collected_warnings,
@@ -169,14 +175,49 @@ def main():
         "syntax. Nested keys use dot syntax (e.g. "
         "generation_metadata.authored_by=human).",
     )
+    parser.add_argument(
+        "--meta-file",
+        type=Path,
+        default=None,
+        help="TOML file with frontmatter defaults under [meta] and "
+        "auto-id settings under [document_id]. When omitted, "
+        ".any2md.toml is auto-discovered by walking up from cwd.",
+    )
     args = parser.parse_args()
+
+    # Resolution order: discovered .any2md.toml → --meta-file → --meta
+    # (highest priority last). Each layer deep-merges over the previous.
+    overrides: dict[str, Any] = {}
+    auto_id_prefix, auto_id_type_code = "LOCAL", "DOC"
+
+    discovered = discover_config()
+    if discovered is not None:
+        cfg = load_toml(discovered)
+        overrides = _deep_merge_overrides(overrides, extract_meta_overrides(cfg))
+        auto_id_prefix, auto_id_type_code = extract_document_id_settings(cfg)
+
+    if args.meta_file is not None:
+        if not args.meta_file.is_file():
+            print(
+                f"Error: --meta-file not found: {args.meta_file}", file=sys.stderr
+            )
+            sys.exit(1)
+        cfg = load_toml(args.meta_file)
+        overrides = _deep_merge_overrides(overrides, extract_meta_overrides(cfg))
+        # Only adopt id settings if the file actually declared them — a
+        # bare --meta-file shouldn't reset values pulled from .any2md.toml.
+        id_section = cfg.get("document_id", {}) if isinstance(cfg, dict) else {}
+        if isinstance(id_section, dict):
+            if "publisher_prefix" in id_section:
+                auto_id_prefix = id_section["publisher_prefix"]
+            if "type_code" in id_section:
+                auto_id_type_code = id_section["type_code"]
 
     try:
         cli_meta = parse_meta_args(args.meta)
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-    overrides: dict[str, Any] = {}
     overrides = _deep_merge_overrides(overrides, cli_meta)
 
     if args.high_fidelity or args.ocr_figures or args.save_images:
@@ -196,6 +237,8 @@ def main():
         save_images=args.save_images,
         strict=args.strict,
         auto_id=args.auto_id,
+        auto_id_prefix=auto_id_prefix,
+        auto_id_type_code=auto_id_type_code,
         frontmatter_overrides=overrides or None,
     )
 
