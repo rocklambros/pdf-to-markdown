@@ -1919,11 +1919,18 @@ from any2md.pipeline import PipelineOptions
 
 
 def _split_frontmatter(text: str) -> tuple[dict, str]:
-    """Helper: split a frontmatter+body string into (yaml_dict, body_str)."""
+    """Helper: split a frontmatter+body string into (yaml_dict, body_str).
+
+    compose() emits a blank-line separator after the closing ---, so we
+    strip a single leading newline from the body to recover the body that
+    was passed into compose().
+    """
     assert text.startswith("---\n")
     end = text.index("\n---\n", 4)
     fm = yaml.safe_load(text[4:end])
     body = text[end + 5 :]
+    if body.startswith("\n"):
+        body = body[1:]
     return fm, body
 
 
