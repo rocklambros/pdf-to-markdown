@@ -370,6 +370,40 @@ def restore_lists_and_code(text: str, _options: "PipelineOptions") -> str:
     return "\n".join(out)
 
 
+_COVER_KEYWORDS = re.compile(
+    r"qr code|scan the|customer feedback form|please share your feedback",
+    re.IGNORECASE,
+)
+_EDITION_RE = re.compile(
+    r"^(?:[A-Z][a-z]+|\d+(?:st|nd|rd|th))\s+edition\s+\d{4}-\d{2}\s*$"
+)
+_CORRECTED_RE = re.compile(r"^Corrected version \d{4}-\d{2}\s*$")
+_FIRST_H2_RE = re.compile(r"^## ")
+
+
+def strip_cover_artifacts(text: str, options: "PipelineOptions") -> str:
+    """T8: Drop cover-page noise (QR blurbs, version stamps) in first 30 lines."""
+    if options.profile not in ("aggressive", "maximum"):
+        return text
+    lines = text.split("\n")
+    out: list[str] = []
+    seen_h2 = False
+    for i, line in enumerate(lines):
+        if _FIRST_H2_RE.match(line):
+            seen_h2 = True
+        if seen_h2 or i > 30:
+            out.append(line)
+            continue
+        if (
+            _COVER_KEYWORDS.search(line)
+            or _EDITION_RE.match(line)
+            or _CORRECTED_RE.match(line)
+        ):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 STAGES: list[Stage] = [
     repair_line_wraps,
     dehyphenate,
@@ -378,4 +412,5 @@ STAGES: list[Stage] = [
     dedupe_toc_table,
     strip_running_headers_footers,
     restore_lists_and_code,
+    strip_cover_artifacts,
 ]
