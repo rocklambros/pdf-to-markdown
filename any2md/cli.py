@@ -7,6 +7,7 @@ from pathlib import Path
 
 from any2md.converters import convert_file, SUPPORTED_EXTENSIONS
 from any2md.converters.html import convert_url
+from any2md.pipeline import PipelineOptions
 from any2md.utils import sanitize_filename, url_to_filename
 
 # Default max file size: 100 MB
@@ -64,6 +65,8 @@ def main():
         help=f"Maximum file size in bytes (default: {_DEFAULT_MAX_FILE_SIZE}).",
     )
     args = parser.parse_args()
+
+    options = PipelineOptions(strip_links=args.strip_links)
 
     # Determine which files to process
     if args.files and args.input_dir:
@@ -139,8 +142,8 @@ def main():
         result = convert_url(
             url,
             args.output_dir,
+            options=options,
             force=args.force,
-            strip_links_flag=args.strip_links,
         )
         if result:
             ok += 1
@@ -175,8 +178,8 @@ def main():
         result = convert_file(
             file_path,
             args.output_dir,
+            options=options,
             force=args.force,
-            strip_links_flag=args.strip_links,
         )
         if result:
             ok += 1
