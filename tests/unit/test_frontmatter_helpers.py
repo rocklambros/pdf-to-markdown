@@ -101,3 +101,26 @@ def test_abstract_returns_none_when_no_paragraph_after_h1():
     body = "# Title\n\n## Section\n\nbody under section.\n"
     # No bare paragraph between H1 and the next heading.
     assert extract_abstract(body) is None
+
+
+from any2md.frontmatter import derive_title
+
+
+def test_derive_title_uses_first_h1():
+    body = "# My Title\n\nbody\n"
+    assert derive_title(body, title_hint=None, fallback="x.pdf") == "My Title"
+
+
+def test_derive_title_falls_back_to_hint_when_no_h1():
+    body = "## No H1\n\nbody\n"
+    assert derive_title(body, title_hint="Hint Title", fallback="x.pdf") == "Hint Title"
+
+
+def test_derive_title_falls_back_to_filename_when_neither():
+    body = "no headings here\n"
+    assert derive_title(body, title_hint=None, fallback="my_doc.pdf") == "my doc"
+
+
+def test_derive_title_strips_markdown_emphasis_in_h1():
+    body = "# **Bold Title** _emphasis_\n"
+    assert derive_title(body, title_hint=None, fallback="x") == "Bold Title emphasis"

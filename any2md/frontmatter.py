@@ -101,3 +101,20 @@ def extract_abstract(body: str) -> str | None:
             return head[: last_dot + 1]
         return head.rstrip() + "..."
     return None
+
+
+_FIRST_H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
+_MD_EMPHASIS_RE = re.compile(r"[*_]+")
+
+
+def derive_title(body: str, title_hint: str | None, fallback: str) -> str:
+    """Pick title: first H1, else hint, else cleaned filename stem."""
+    m = _FIRST_H1_RE.search(body)
+    if m:
+        title = _MD_EMPHASIS_RE.sub("", m.group(1)).strip()
+        if title:
+            return title
+    if title_hint:
+        return title_hint.strip()
+    stem = fallback.rsplit(".", 1)[0]
+    return stem.replace("_", " ").strip() or "Untitled"
