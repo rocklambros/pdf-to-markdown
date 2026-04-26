@@ -1,71 +1,122 @@
-"""DOCX to Markdown converter module."""
+"""DOCX to Markdown converter (v1.0). Mammoth fallback path only in Phase 1."""
+
+from __future__ import annotations
 
 import sys
+import xml.etree.ElementTree as ET
+import zipfile
+from datetime import date
 from pathlib import Path
 
 import mammoth
 import markdownify
 
-from any2md.utils import (
-    sanitize_filename,
-    extract_title,
-    clean_markdown,
-    strip_links,
-    build_frontmatter,
-)
+from any2md import pipeline
+from any2md.frontmatter import SourceMeta, compose
+from any2md.pipeline import PipelineOptions
+from any2md.utils import sanitize_filename
+
+_NS_CORE = {
+    "dc": "http://purl.org/dc/elements/1.1/",
+    "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+    "dcterms": "http://purl.org/dc/terms/",
+}
+_NS_APP = {
+    "ext": "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
+}
+
+
+def _read_docx_metadata(docx_path: Path) -> dict[str, object]:
+    out: dict[str, object] = {
+        "title_hint": None,
+        "authors": [],
+        "organization": None,
+        "date": None,
+        "keywords": [],
+    }
+    try:
+        with zipfile.ZipFile(docx_path) as z:
+            try:
+                with z.open("docProps/core.xml") as f:
+                    root = ET.parse(f).getroot()
+                title = root.findtext("dc:title", namespaces=_NS_CORE)
+                if title:
+                    out["title_hint"] = title.strip()
+                creator = root.findtext("dc:creator", namespaces=_NS_CORE)
+                if creator:
+                    out["authors"] = [creator.strip()]
+                kw = root.findtext("cp:keywords", namespaces=_NS_CORE) or ""
+                out["keywords"] = [k.strip() for k in kw.split(",") if k.strip()]
+                modified = root.findtext("dcterms:modified", namespaces=_NS_CORE)
+                if modified:
+                    out["date"] = modified[:10]
+            except KeyError:
+                pass
+            try:
+                with z.open("docProps/app.xml") as f:
+                    root = ET.parse(f).getroot()
+                company = root.findtext("ext:Company", namespaces=_NS_APP)
+                if company:
+                    out["organization"] = company.strip()
+            except KeyError:
+                pass
+    except (zipfile.BadZipFile, ET.ParseError):
+        pass
+    return out
 
 
 def convert_docx(
     docx_path: Path,
     output_dir: Path,
+    options: PipelineOptions | None = None,
     force: bool = False,
     strip_links_flag: bool = False,
 ) -> bool:
-    """Convert a single DOCX to LLM-optimized Markdown.
+    if options is None:
+        options = PipelineOptions(strip_links=strip_links_flag)
 
-    Returns True on success, False on failure.
-    """
     out_name = sanitize_filename(docx_path.name)
     out_path = output_dir / out_name
-
     if out_path.exists() and not force:
         print(f"  SKIP (exists): {out_name}")
         return True
 
     try:
         with open(docx_path, "rb") as f:
-            result = mammoth.convert_to_html(f)
-
+            html_result = mammoth.convert_to_html(f)
         md_text = markdownify.markdownify(
-            result.value,
+            html_result.value,
             heading_style="ATX",
-            strip=["img"],
+            strip=["img"] if not options.save_images else [],
+            bullets="-",
         )
+        md_text, warnings = pipeline.run(md_text, "text", options)
 
-        # Clean markdown content
-        md_text = clean_markdown(md_text)
-
-        # Optionally strip links (before frontmatter)
-        if strip_links_flag:
-            md_text = strip_links(md_text)
-
-        # Extract title
-        title = extract_title(md_text, docx_path.stem)
-
-        # Word count (DOCX has no reliable page count)
-        word_count = len(md_text.split())
-
-        # Build frontmatter
-        frontmatter = build_frontmatter(
-            title, docx_path.name, doc_type="docx", word_count=word_count
+        props = _read_docx_metadata(docx_path)
+        meta = SourceMeta(
+            title_hint=props["title_hint"],
+            authors=props["authors"],
+            organization=props["organization"],
+            date=(
+                props["date"]
+                or date.fromtimestamp(docx_path.stat().st_mtime).isoformat()
+            ),
+            keywords=props["keywords"],
+            pages=None,
+            word_count=len(md_text.split()),
+            source_file=docx_path.name,
+            source_url=None,
+            doc_type="docx",
+            extracted_via="mammoth+markdownify",
+            lane="text",
         )
+        full = compose(md_text, meta, options)
 
-        full_text = frontmatter + md_text
-
-        # Write output
         output_dir.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(full_text, encoding="utf-8")
-        print(f"  OK: {out_name} ({word_count} words)")
+        out_path.write_text(full, encoding="utf-8", newline="\n")
+        wc = meta.word_count or 0
+        suffix = f", {len(warnings)} warning(s)" if warnings else ""
+        print(f"  OK: {out_name} ({wc} words{suffix})")
         return True
 
     except (OSError, ValueError) as e:
