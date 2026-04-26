@@ -1,0 +1,5 @@
+EFFICIENT FILE FORMAT TEST
+==========================
+
+This file ex­ists to test soft­hyphen stripping.
+It also has ligﬁatures (ﬁ and ﬂ) and “smart quotes” that must normalize.
