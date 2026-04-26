@@ -1,0 +1,20 @@
+# CODEOWNERS — auto-request review from the right person on every PR.
+# Syntax docs: https://docs.github.com/articles/about-code-owners
+
+# Default owner for everything in the repo.
+*                                       @rocklambros
+
+# Release-critical files: any change here should get extra attention.
+/.github/workflows/                     @rocklambros
+/pyproject.toml                         @rocklambros
+/any2md/__init__.py                     @rocklambros
+/CHANGELOG.md                           @rocklambros
+
+# Output contract — changes here are user-visible breaking changes.
+/any2md/frontmatter.py                  @rocklambros
+/any2md/heuristics.py                   @rocklambros
+/any2md/pipeline/                       @rocklambros
+
+# Documentation changes are lower-risk but still benefit from a review.
+/docs/                                  @rocklambros
+/README.md                              @rocklambros
