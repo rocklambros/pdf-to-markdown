@@ -8,8 +8,8 @@ must be a no-op on input it does not match.
 from __future__ import annotations
 
 from contextvars import ContextVar
-from dataclasses import dataclass
-from typing import Callable, Literal
+from dataclasses import dataclass, field
+from typing import Any, Callable, Literal
 
 Lane = Literal["structured", "text"]
 Profile = Literal["conservative", "aggressive", "maximum"]
@@ -22,7 +22,20 @@ class PipelineOptions:
     save_images: bool = False
     strip_links: bool = False
     strict: bool = False
-    high_fidelity: bool = False  # NEW: force Docling backend
+    high_fidelity: bool = False  # force Docling backend
+    # --auto-id wiring. When ``auto_id`` is True, ``frontmatter.compose``
+    # emits a generated ``document_id``. The prefix and type_code are
+    # used as-is; Phase 4 hardcodes "LOCAL"/"DOC" and Task 5 wires
+    # config-driven overrides via .any2md.toml [document_id].
+    auto_id: bool = False
+    auto_id_prefix: str = "LOCAL"
+    auto_id_type_code: str = "DOC"
+    # ``frontmatter_overrides`` is the parsed merge of ``.any2md.toml``,
+    # ``--meta-file``, and CLI ``--meta KEY=VAL`` arguments (highest
+    # priority last). Forwarded into ``frontmatter.compose`` so user-
+    # supplied values replace derived fields. ``None`` means "no
+    # overrides" (the common case).
+    frontmatter_overrides: dict[str, Any] | None = field(default=None)
 
 
 Stage = Callable[[str, PipelineOptions], str]
