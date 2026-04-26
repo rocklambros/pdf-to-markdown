@@ -345,6 +345,44 @@ def strip_running_headers_footers(text: str, _options: "PipelineOptions") -> str
     return "\f".join(out_pages)
 
 
+_ORPHAN_PUNCT_RE = re.compile(r"^\s*[|>]+\s*$")
+_TERMINAL_PUNCT_RE = re.compile(r"[.!?:;]$")
+_HEADING_OR_KNOWN_SHORT_RE = re.compile(
+    r"^(Contents|References|Appendix|Notes|Note:|Index|Glossary|"
+    r"Acknowledgments|Abstract|Summary)\s*$",
+    re.IGNORECASE,
+)
+
+
+def strip_web_fragments(text: str, options: "PipelineOptions") -> str:
+    """T10: Drop trafilatura extraction fragments (orphan chars, incomplete sentences)."""
+    if options.profile not in ("aggressive", "maximum"):
+        return text
+    lines = text.split("\n")
+    out: list[str] = []
+    n = len(lines)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        # Orphan punctuation
+        if _ORPHAN_PUNCT_RE.match(line):
+            continue
+        # Short incomplete sentence between blank lines
+        if (
+            stripped
+            and len(stripped) <= 25
+            and not _TERMINAL_PUNCT_RE.search(stripped)
+            and not _HEADING_OR_KNOWN_SHORT_RE.match(stripped)
+            and not stripped.startswith("#")
+            and not stripped.startswith("-")
+            and not stripped.startswith("|")
+            and (i == 0 or not lines[i - 1].strip())
+            and (i == n - 1 or not lines[i + 1].strip())
+        ):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 def restore_lists_and_code(text: str, _options: "PipelineOptions") -> str:
     """T6: Wrap ≥4-line indented blocks (4 spaces or tab) in fenced code.
 
@@ -434,6 +472,7 @@ STAGES: list[Stage] = [
     dedupe_toc_block,
     dedupe_toc_table,
     strip_running_headers_footers,
+    strip_web_fragments,
     restore_lists_and_code,
     strip_cover_artifacts,
 ]
