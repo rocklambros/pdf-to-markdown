@@ -7,10 +7,24 @@ never touch YAML directly.
 
 from __future__ import annotations
 
+import hashlib
+import unicodedata
 from dataclasses import dataclass
 from typing import Literal
 
 from any2md.pipeline import Lane
+
+
+def compute_content_hash(body: str) -> str:
+    """SHA-256 of NFC-normalized, LF-line-ended body. SSRM §5.1.
+
+    The body MUST be the post-pipeline output (after C1-C5). This function
+    re-applies NFC and LF normalization defensively so callers can pass any
+    string and get a stable hash.
+    """
+    text = body.replace("\r\n", "\n").replace("\r", "\n")
+    text = unicodedata.normalize("NFC", text)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 @dataclass
