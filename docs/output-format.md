@@ -53,6 +53,10 @@ The fields below are grouped: identity, classification, provenance, integrity,
 optional, then any2md extension fields retained from v0.7 for traceability.
 This is the order they appear in the YAML block.
 
+v1.0.2 added one extension field, `produced_by`, between `extracted_via` and
+`pages`. It's documented in its own subsection below and listed alongside the
+other any2md extension fields.
+
 ## Field-by-field reference
 
 Each field carries: a one-line meaning, a type, a derivation rule, what
@@ -346,6 +350,41 @@ document.
 This field is what tells you, looking at an output file in isolation, why two
 otherwise-similar inputs produced different output shapes.
 
+### `produced_by`
+
+**auto, conditional** | type: `string` (any2md extension field, new in v1.0.2)
+
+**Derivation:** Software that produced the source file. Distinct from
+`extracted_via`, which records the any2md backend that produced the markdown
+— `produced_by` records the upstream tool that produced the *source*.
+
+| Source | Where the value comes from |
+|---|---|
+| PDF | The `/Creator` metadata field, after passing through `heuristics.filter_organization`. Software-pattern matches (LaTeX, acmart, Adobe InDesign, Microsoft Word, Pandoc, etc.) populate `produced_by`; non-software values populate `organization` instead. |
+| DOCX | The `<Application>` element of `docProps/app.xml`. Routed through the same `filter_organization` check. The `<Company>` element (a real organization) takes priority over `<Application>` for the `organization` field. |
+| HTML / URL | Not populated; trafilatura's `sitename` is treated as a real site, not software. |
+| TXT | Not populated; the format does not expose a producer. |
+
+The field is omitted from the frontmatter when empty. When the source was
+created by a real organization (and therefore `organization` is populated),
+`produced_by` will typically be empty; when the source was produced by
+software (LaTeX, Word, InDesign), `organization` will typically be empty and
+`produced_by` will hold the software string.
+
+This field exists because the v0.7-era behavior of dumping the PDF `/Creator`
+software string into `organization` was wrong: a value like
+`"LaTeX with acmart 2024/08/25 v2.09 …"` is not the document's organization.
+v1.0.2 separates the two, so downstream consumers that key on `organization`
+get a real organization name (or `""`) and never see software junk there.
+
+**Example values:**
+- `"LaTeX with acmart 2024/08/25 v2.09 ..."`
+- `"Adobe InDesign 16.2 (Windows)"`
+- `"Microsoft® Word for Microsoft 365"`
+- `"Pandoc 3.1"`
+
+**Example empty:** field is omitted from the YAML block.
+
 ### `pages`, `word_count`
 
 **auto, conditional** | type: `integer`
@@ -620,8 +659,8 @@ tampered with after generation.
 
 This schema describes the v1.0 frontmatter block. Conditional fields
 (`keywords`, `abstract_for_rag`, `pages`, `word_count`, `source_file`,
-`source_url`) are documented here as optional; they're omitted from the
-frontmatter when not set. SSRM-only fields a user might add (`tlp`,
+`source_url`, `produced_by`) are documented here as optional; they're omitted
+from the frontmatter when not set. SSRM-only fields a user might add (`tlp`,
 `frameworks_referenced`, etc.) are listed as additional valid fields.
 
 ```json
@@ -741,6 +780,10 @@ frontmatter when not set. SSRM-only fields a user might add (`tlp`,
         "trafilatura+bs4_fallback",
         "heuristic"
       ]
+    },
+    "produced_by": {
+      "type": "string",
+      "description": "Software that produced the source file (PDF Creator, DOCX Application). New in v1.0.2; omitted when empty."
     },
     "pages": {
       "type": "integer",
