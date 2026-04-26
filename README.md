@@ -1,6 +1,26 @@
+<p align="center">
+  <img src="assets/logo.png" alt="any2md" width="500"/>
+</p>
+
 # any2md
 
 Convert PDFs, DOCX, HTML, URLs, and plain text into structured, machine-consumable Markdown for downstream RAG pipelines.
+
+## What's new in 1.0.2
+
+A patch release focused on frontmatter and body-content quality, validated against four representative inputs (an arxiv academic PDF, an ISO/IEC standard, an academic DOCX, a Wikipedia URL). Eleven distinct artifacts are addressed:
+
+- New `any2md/heuristics.py` module — pure-functions library that `frontmatter.compose()` consults to refine `title`, `abstract_for_rag`, `authors`, and `organization` before emission.
+- New `produced_by` extension field, sitting between `extracted_via` and `pages`. Records the software that produced the source file (PDF `Creator`, DOCX `Application`). Distinct from `extracted_via`, which records the any2md backend.
+- New shared cleanup stage **C8 `decode_html_entities`** — universal removal of `&amp;`, `&lt;`, `&gt;`, and numeric entities (`&#x2014;`, `&#8212;`) from body text. Code-block aware.
+- Four new text-lane stages (aggressive/maximum profile only):
+  - **T7 `dedupe_toc_table`** — strips table-formatted TOCs that the existing T4 text-formatted heuristic doesn't catch. Common on academic PDFs.
+  - **T8 `strip_cover_artifacts`** — drops cover-page noise (QR-code blurbs, "Third edition 2022-02"-style version stamps) that appears before the first H2.
+  - **T9 `strip_repeated_byline`** — removes "Author's Contact Information:" and similar lines that duplicate a byline.
+  - **T10 `strip_web_fragments`** — drops trafilatura extraction fragments (orphan `|` and `>` lines, short incomplete sentences surrounded by blank lines).
+- New CLI flag `--no-arxiv-lookup`. Arxiv enrichment for filenames matching `\d{4}\.\d{4,5}` is **on by default**; this flag disables it for airgapped environments.
+
+The full design rationale lives in [docs/superpowers/specs/2026-04-26-any2md-v1.0.2-design.md](docs/superpowers/specs/2026-04-26-any2md-v1.0.2-design.md). Per-fix detail is in the [CHANGELOG](CHANGELOG.md).
 
 ## What this is
 
@@ -114,6 +134,7 @@ source_file: "safety-alignment.docx"               # original filename (any2md e
 type: "docx"                                       # source format (any2md extension field)
 word_count: 14289                                  # any2md extension field
 extracted_via: "docling"                           # which backend produced the markdown
+produced_by: "Microsoft® Word for Microsoft 365"   # software that produced the source (new in v1.0.2)
 ---
 ```
 
@@ -378,6 +399,10 @@ type_code = "GD"
 
 With this file in place and `--auto-id` passed, generated `document_id` values look like `CSA-2026-GD-a3f1c91d`. The resolution order, highest priority first: explicit `--meta KEY=VAL` arguments, then `--meta-file PATH` (when given), then auto-discovered `.any2md.toml`, then the tool's defaults. Full flag and config reference in [docs/cli-reference.md](docs/cli-reference.md).
 
+### Network behavior
+
+For PDFs whose filename matches the arxiv ID pattern (`\d{4}\.\d{4,5}`, e.g. `2501.17755v1.pdf`), any2md by default queries `https://export.arxiv.org/api/query` to enrich `authors`, `abstract_for_rag`, and `date` from the official arxiv metadata. The lookup is SSRF-guarded, has a 5-second timeout, and emits a non-blocking warning on any failure — conversion proceeds either way. Pass `--no-arxiv-lookup` to disable this for airgapped environments or when you want any2md to make no outbound calls. See [docs/cli-reference.md](docs/cli-reference.md#--no-arxiv-lookup) for details.
+
 ### Output verbosity and exit codes
 
 The CLI has three verbosity flags that pair with a four-value exit-code contract:
@@ -412,7 +437,7 @@ The full symptom-cause-fix triage guide, plus deeper diagnosis steps and follow-
 any2md uses a two-lane post-processing pipeline: one lane for layout-trustworthy backends (Docling), one for backends that need heavier text repair (pymupdf4llm, trafilatura, mammoth, the TXT heuristic). Both lanes converge on a shared cleanup pass, and the same `frontmatter.py` module emits YAML for every input format.
 
 ```
-                  any2md  v1.0
+                  any2md  v1.0.2
                        │
                   ┌────┴────┐
               CLI │ cli.py  │  parse args, classify URL/file/dir,
@@ -429,43 +454,66 @@ any2md uses a two-lane post-processing pipeline: one lane for layout-trustworthy
         │ pymupdf4llm│ mammoth+md │       │
         └────┬───────┴────┬───────┴───┬───┘
              │            │           │
+             │  SourceMeta carries:
+             │    organization, produced_by  ◀ NEW in v1.0.2
+             │    (split via heuristics.filter_organization)
+             │
        structured-md  structured-md   text-md
              │            │           │
              └─────┬──────┴───────────┘
                    ▼
         ┌─────────────────────────┐
         │  pipeline/structured.py │   structured lane
-        │  - figure caption pass  │   (trusts layout)
-        │  - table compactor      │
-        │  - cite normalizer      │
-        │  - heading hierarchy    │
+        │  S1 figure caption pass │   (trusts layout)
+        │  S2 table compactor     │
+        │  S3 cite normalizer     │
+        │  S4 heading hierarchy   │
         └────────────┬────────────┘
                      │
         ┌────────────┴────────────┐
         │     pipeline/text.py    │   text lane
-        │  - line-wrap repair     │
-        │  - dehyphenate          │
-        │  - duplicate paragraph  │
-        │  - TOC dedupe           │
-        │  - hdr/ftr strip        │
-        │  - list/code restore    │
+        │  T1 line-wrap repair    │
+        │  T2 dehyphenate         │
+        │  T9 strip repeated      │   ◀ NEW (E1)
+        │     byline              │
+        │  T3 dedupe paragraphs   │
+        │  T4 dedupe TOC block    │
+        │  T7 dedupe TOC table    │   ◀ NEW (D1)
+        │  T5 hdr/ftr strip       │
+        │  T10 strip web          │   ◀ NEW (D2)
+        │      fragments          │
+        │  T6 list/code restore   │
+        │  T8 strip cover         │   ◀ NEW (D3)
+        │     artifacts           │
         └────────────┬────────────┘
                      │
         ┌────────────┴────────────┐
         │   pipeline/cleanup.py   │   shared lane
-        │  - NFC normalize        │   (always last)
-        │  - soft hyphen strip    │
-        │  - ligature normalize   │
-        │  - quote/dash normalize │
-        │  - whitespace collapse  │
-        │  - footnote marker strip│
-        │  - validate             │
+        │  C1 NFC normalize       │   (always last)
+        │  C2 soft hyphen strip   │
+        │  C3 ligature normalize  │
+        │  C4 quote/dash normalize│
+        │  C5 whitespace collapse │
+        │  C8 decode HTML entities│   ◀ NEW (B1, all profiles)
+        │  C6 footnote marker strip│
+        │  C7 validate            │
         └────────────┬────────────┘
                      │
-        ┌────────────┴────────────┐
-        │     frontmatter.py      │   SSRM-compatible
-        │  - merge user overrides │   YAML emitter
+                     │           ┌──────────────────────────┐
+                     │           │   any2md/heuristics.py   │  ◀ NEW v1.0.2
+                     │           │  - refine_title          │
+                     │           │  - refine_abstract       │
+                     │           │  - extract_authors       │
+                     │           │    (+ optional arxiv API)│
+                     │           │  - filter_organization   │
+                     │           └────────────┬─────────────┘
+                     │                        │
+                     ▼                        │
+        ┌─────────────────────────┐           │
+        │     frontmatter.py      │ ◀─────────┘   (consults heuristics
+        │  - merge user overrides │                before YAML emission)
         │  - derive title/date/…  │
+        │  - emit produced_by     │   ◀ NEW v1.0.2
         │  - compute content_hash │
         │  - emit YAML            │
         └────────────┬────────────┘
@@ -474,7 +522,7 @@ any2md uses a two-lane post-processing pipeline: one lane for layout-trustworthy
               <output>.md   ← frontmatter + cleaned body
 ```
 
-The two-lane design exists because Docling output is layout-correct (running aggressive line-wrap repair on it would corrupt tables), while pymupdf4llm/trafilatura/TXT output benefits from heavier regex repair. The shared cleanup pass runs identically for both lanes — that's the determinism boundary that makes `content_hash` reproducible. Full stage-by-stage contract reference, plus contributor guidance for adding new converters or pipeline stages, lives in [docs/architecture.md](docs/architecture.md).
+The two-lane design exists because Docling output is layout-correct (running aggressive line-wrap repair on it would corrupt tables), while pymupdf4llm/trafilatura/TXT output benefits from heavier regex repair. The shared cleanup pass runs identically for both lanes — that's the determinism boundary that makes `content_hash` reproducible. v1.0.2 added a leaf `heuristics.py` module that `frontmatter.compose()` consults to refine the title, abstract, authors, and organization fields before YAML emission; new pipeline stages C8 and T7–T10 address concrete artifacts found in academic and standards-document PDFs. Full stage-by-stage contract reference, plus contributor guidance for adding new converters or pipeline stages, lives in [docs/architecture.md](docs/architecture.md).
 
 ## Migrating from v0.7
 
