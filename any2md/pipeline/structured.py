@@ -54,3 +54,28 @@ def lift_figure_captions(text: str, options: "PipelineOptions") -> str:
 STAGES: list[Stage] = [
     lift_figure_captions,
 ]
+
+
+_TABLE_ROW_RE = re.compile(r"^\|.*\|\s*$")
+_ALIGNMENT_ROW_RE = re.compile(r"^\|[\s:|-]+\|\s*$")
+
+
+def compact_tables(text: str, _options: "PipelineOptions") -> str:
+    """S2: Strip per-cell padding spaces in GFM tables. Skip alignment row."""
+    lines = text.split("\n")
+    out: list[str] = []
+    for line in lines:
+        # Only act on lines that look like a table row
+        if _TABLE_ROW_RE.match(line) and not _ALIGNMENT_ROW_RE.match(line):
+            cells = line.split("|")
+            # First and last entries are empty (line starts/ends with |)
+            cells = [c.strip() for c in cells]
+            # Reconstruct without padding
+            line = "|" + "|".join(c if c == "" else f" {c} " for c in cells[1:-1]) + "|"
+            # Compact spaces inside each cell wrapper to single
+            line = re.sub(r"  +", " ", line)
+        out.append(line)
+    return "\n".join(out)
+
+
+STAGES.append(compact_tables)
