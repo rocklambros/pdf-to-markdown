@@ -119,3 +119,146 @@ class TestRefineTitle:
             profile="conservative",
         )
         assert result_wiki == "Wikipedia:Signs of AI writing"
+
+
+# --------------------------------------------------------------------- #
+# refine_abstract
+# --------------------------------------------------------------------- #
+
+
+class TestRefineAbstract:
+    def test_clean_candidate_returned_unchanged(self):
+        candidate = (
+            "This paper presents a novel approach to AI alignment. "
+            "We demonstrate that markets can effectively govern AI "
+            "deployment when proper incentive structures are in place. "
+            "Our results show significant improvements over the baseline."
+        )
+        body = "# Title\n\n" + candidate + "\n\n## Section\n\nContent..."
+        result = heuristics.refine_abstract(candidate, body)
+        assert result == candidate
+
+    def test_abstract_heading_in_body_preferred_over_candidate(self):
+        candidate = (
+            "BYLINE Adams Smith, John Doe 1, 2 University Name (some affiliation)"
+        )
+        real_abstract = (
+            "We propose a new framework for AI governance through market "
+            "mechanisms. The approach combines economic incentives with "
+            "technical safeguards. Empirical evaluation shows that the "
+            "framework achieves better outcomes than alternatives."
+        )
+        body = (
+            "# Paper Title\n\n"
+            + candidate
+            + "\n\n## Abstract\n\n"
+            + real_abstract
+            + "\n\n## Introduction\n\nIntro text...\n"
+        )
+        result = heuristics.refine_abstract(candidate, body)
+        assert result == real_abstract
+
+    def test_byline_pattern_candidate_skipped(self):
+        # Byline candidate matches pattern (caps-heavy + comma + digit).
+        # Heuristic walks to next paragraph in body that doesn't match
+        # any skip pattern.
+        candidate = "PHILIP MOREIRA TOMEI 1, 2, RUPAL JAIN 2, 3"
+        next_para = (
+            "This paper investigates AI governance frameworks. "
+            "We provide a comprehensive analysis of existing market-based "
+            "mechanisms and propose new approaches that better align "
+            "private and public interests."
+        )
+        body = (
+            "# Paper Title\n\n"
+            + candidate
+            + "\n\n"
+            + next_para
+            + "\n\n## Section\n\nContent...\n"
+        )
+        result = heuristics.refine_abstract(candidate, body)
+        assert result == next_para
+
+    def test_qr_code_candidate_skipped(self):
+        candidate = (
+            "Please share your feedback. Scan the QR code to access "
+            "the customer feedback form. Your responses help us improve."
+        )
+        next_para = (
+            "Information security, cybersecurity, and privacy protection "
+            "are critical concerns for modern organizations. This standard "
+            "provides a comprehensive set of controls and guidance for "
+            "implementing an information security management system."
+        )
+        body = (
+            "# ISO Standard\n\n"
+            + candidate
+            + "\n\n"
+            + next_para
+            + "\n\n## Body\n\nContent...\n"
+        )
+        result = heuristics.refine_abstract(candidate, body)
+        assert result == next_para
+
+    def test_markdown_links_stripped(self):
+        candidate = (
+            "This paper discusses [machine learning](https://example.com) "
+            "and [neural networks](https://other.example) in the context "
+            "of large-scale [deployment](https://yet.another.example). "
+            "Our findings have important implications for the field."
+        )
+        body = "# Title\n\n" + candidate + "\n"
+        result = heuristics.refine_abstract(candidate, body)
+        assert "[" not in result
+        assert "(http" not in result
+        assert "machine learning" in result
+        assert "neural networks" in result
+
+    def test_html_entities_decoded(self):
+        candidate = (
+            "This paper presents an analysis of AI &amp; ML governance. "
+            "We show that &lt;safety&gt; constraints are essential for "
+            "responsible deployment in production environments. The work "
+            "extends prior research on alignment techniques."
+        )
+        body = "# Title\n\n" + candidate + "\n"
+        result = heuristics.refine_abstract(candidate, body)
+        assert "&amp;" not in result
+        assert "&lt;" not in result
+        assert "AI & ML" in result
+        assert "<safety>" in result
+
+    def test_long_candidate_truncated_at_sentence_boundary(self):
+        sentences = [
+            "This paper introduces a novel framework for governance.",
+            "The framework combines economic and technical mechanisms.",
+            "We evaluate the framework across multiple deployment scenarios.",
+            "Our results demonstrate significant improvements over baselines.",
+            "Future work will explore extensions to broader application areas.",
+            "Acknowledgments and references follow this section.",
+            "Additional considerations include scalability and robustness.",
+            "Several open questions remain for follow-up investigation.",
+        ]
+        candidate = " ".join(sentences)
+        assert len(candidate) > 400
+        body = "# Title\n\n" + candidate + "\n"
+        result = heuristics.refine_abstract(candidate, body)
+        assert len(result) <= 400
+        # Last char should be sentence terminator (period, ?, !)
+        assert result[-1] in ".?!"
+
+    def test_conservative_profile_returns_none_when_no_clean_candidate(self):
+        # Candidate is byline (skipped). No "## Abstract" heading.
+        # Body has no acceptable fallback paragraph (only short or
+        # skipped content). Conservative profile returns None.
+        candidate = "PHILIP MOREIRA TOMEI 1, 2, RUPAL JAIN 2, 3"
+        body = (
+            "# Title\n\n"
+            + candidate
+            + "\n\nShort line.\n\n"
+            "Page 5\n\n## Section\n\nContent...\n"
+        )
+        result = heuristics.refine_abstract(
+            candidate, body, profile="conservative",
+        )
+        assert result is None

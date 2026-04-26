@@ -10,6 +10,7 @@ candidate values before YAML emission.
 
 from __future__ import annotations
 
+import html
 import re
 from typing import NamedTuple
 
@@ -60,6 +61,29 @@ _DOCX_PREFIX_RE = re.compile(
     r"(?:Final Project|Final Paper|Term Paper|Thesis|Dissertation|"
     r"Research Paper|Capstone Project)\s+",
 )
+
+# Patterns marking a paragraph as byline / cover blurb / TOC
+_BYLINE_DETECT_RE = re.compile(
+    r"^[A-Z][A-Z .,\-&'/]{8,}\d.*,",
+)
+_COVER_BLURB_KEYWORDS = (
+    "feedback", "qr code", "scan the", "customer feedback form",
+    "third edition", "corrected version",
+)
+_TOC_LINE_HINTS_RE = re.compile(r"\.{3,}\s*\d+|^\s*page\s+\d+", re.IGNORECASE)
+
+# Markdown inline link: [text](url) → text
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+
+# Abstract / Summary heading detection (H2 or H3, case-insensitive)
+_ABSTRACT_HEADING_RE = re.compile(
+    r"^#{2,3}\s+(?:Abstract|ABSTRACT|Summary|SUMMARY)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+# Sentence terminator for truncation (period/question/exclamation followed
+# by whitespace or end-of-string)
+_SENTENCE_END_RE = re.compile(r"[.!?](?=\s|$)")
 
 
 class OrgFilterResult(NamedTuple):
@@ -152,3 +176,124 @@ def refine_title(
                 refined = tail.strip()
 
     return refined
+
+
+def _is_skip_paragraph(para: str) -> bool:
+    """Return True if a paragraph matches a byline / cover blurb / TOC pattern."""
+    stripped = para.strip()
+    if not stripped:
+        return True
+    # Byline: caps-heavy, has digit (affiliation), comma-separated.
+    if _BYLINE_DETECT_RE.match(stripped):
+        return True
+    # Cover-page blurb keywords (case-insensitive).
+    lowered = stripped.lower()
+    for kw in _COVER_BLURB_KEYWORDS:
+        if kw in lowered:
+            return True
+    # TOC line hints.
+    if _TOC_LINE_HINTS_RE.search(stripped):
+        return True
+    return False
+
+
+def _cleanup_abstract(text: str) -> str:
+    """Apply post-selection cleanup: strip links, decode entities, truncate."""
+    # Strip markdown links: [text](url) → text
+    text = _MD_LINK_RE.sub(r"\1", text)
+    # Decode HTML entities
+    text = html.unescape(text)
+    # Collapse whitespace runs
+    text = re.sub(r"\s+", " ", text).strip()
+    # Truncate to <= 400 chars at last sentence boundary
+    if len(text) > 400:
+        head = text[:400]
+        # Find last sentence terminator inside the head
+        matches = list(_SENTENCE_END_RE.finditer(head))
+        if matches:
+            cut = matches[-1].end()
+            text = head[:cut].rstrip()
+        else:
+            # No sentence boundary — hard truncate
+            text = head.rstrip()
+    return text
+
+
+def _split_body_paragraphs(body: str) -> list[str]:
+    """Split body into paragraphs (blank-line separated, headings excluded)."""
+    paras: list[str] = []
+    for chunk in re.split(r"\n\s*\n", body):
+        line = chunk.strip()
+        if not line:
+            continue
+        # Skip heading lines
+        if line.startswith("#"):
+            continue
+        paras.append(line)
+    return paras
+
+
+def refine_abstract(
+    candidate: str | None,
+    body: str,
+    *,
+    profile: Profile = "aggressive",
+) -> str | None:
+    """Replace candidate when it looks like a byline / cover blurb / TOC.
+
+    Selection (in order):
+      1. Body section under "## Abstract" / "## ABSTRACT" / "## Summary"
+         (case-insensitive H2/H3) — take its first paragraph >= 80 chars.
+      2. First non-skip paragraph >= 80 chars after H1 (current
+         heuristic with skip-list applied).
+      3. None.
+
+    Skip patterns (move to the next paragraph if these match):
+      - Author byline: starts with caps-heavy text, >= 3 commas, >= 1
+        digit (affiliation marker).
+      - Cover-page blurb: contains any of "feedback", "qr code",
+        "scan the", "customer feedback form" (case-insensitive).
+      - TOC line: contains "....\\d+" or "page \\d+" / "Page \\d+".
+
+    Post-selection cleanup (always applied):
+      - Strip inline markdown link syntax: [text](url) → text.
+      - Decode HTML entities (html.unescape).
+      - Truncate to <= 400 chars at last sentence boundary.
+
+    Conservative profile: skip-list still active, but if no qualifying
+    paragraph found returns None instead of falling through to a
+    skipped paragraph. (Default aggressive returns the first non-skip
+    even if it's a fallback.)
+    """
+    # Step 1: prefer "## Abstract" / "## Summary" body section.
+    m = _ABSTRACT_HEADING_RE.search(body)
+    if m:
+        rest = body[m.end():]
+        # Take first non-empty paragraph until next heading or blank-line gap.
+        for para in _split_body_paragraphs(rest):
+            if len(para) >= 80 and not _is_skip_paragraph(para):
+                return _cleanup_abstract(para)
+
+    # Step 2: candidate. Apply skip-list; if candidate is clean, use it.
+    if candidate and not _is_skip_paragraph(candidate):
+        return _cleanup_abstract(candidate)
+
+    # Candidate skipped or missing. Walk body paragraphs.
+    for para in _split_body_paragraphs(body):
+        # Skip the candidate itself if it appears verbatim in body.
+        if candidate and para.strip() == candidate.strip():
+            continue
+        if _is_skip_paragraph(para):
+            continue
+        if len(para) < 80:
+            continue
+        return _cleanup_abstract(para)
+
+    # Nothing acceptable.
+    if profile == "conservative":
+        return None
+    # Aggressive fallback: if candidate exists but was skipped, return it
+    # with cleanup applied (best-effort). Otherwise None.
+    if candidate:
+        return _cleanup_abstract(candidate)
+    return None
