@@ -234,10 +234,58 @@ def strip_running_headers_footers(text: str, _options: "PipelineOptions") -> str
     return "\f".join(out_pages)
 
 
+def restore_lists_and_code(text: str, _options: "PipelineOptions") -> str:
+    """T6: Wrap ≥4-line indented blocks (4 spaces or tab) in fenced code.
+
+    Conservative — only acts when block sits between blank lines and is
+    not already inside a fence.
+    """
+    lines = text.split("\n")
+    out: list[str] = []
+    in_fence = False
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            out.append(line)
+            i += 1
+            continue
+        if in_fence:
+            out.append(line)
+            i += 1
+            continue
+
+        # Look for a run of indented lines (4+ leading spaces)
+        if line.startswith("    ") and (i == 0 or lines[i - 1].strip() == ""):
+            run_start = i
+            while i < len(lines) and (lines[i].startswith("    ") or lines[i] == ""):
+                i += 1
+            run = lines[run_start:i]
+            non_empty = [r for r in run if r.strip()]
+            if len(non_empty) >= 4:
+                # Strip the leading 4 spaces and wrap in a fence
+                out.append("```")
+                for r in run:
+                    if r.startswith("    "):
+                        out.append(r[4:])
+                    else:
+                        out.append(r)
+                out.append("```")
+                continue
+            else:
+                out.extend(run)
+                continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)
+
+
 STAGES: list[Stage] = [
     repair_line_wraps,
     dehyphenate,
     dedupe_paragraphs,
     dedupe_toc_block,
     strip_running_headers_footers,
+    restore_lists_and_code,
 ]
