@@ -79,3 +79,14 @@ def compact_tables(text: str, _options: "PipelineOptions") -> str:
 
 
 STAGES.append(compact_tables)
+
+
+_CITE_GAP_RE = re.compile(r"(\[\d+\])\s+(?=\[\d+\])")
+
+
+def normalize_citations(text: str, _options: "PipelineOptions") -> str:
+    """S3: Coalesce '[1] [2] [3]' → '[1][2][3]' (numeric only)."""
+    return _CITE_GAP_RE.sub(r"\1", text)
+
+
+STAGES.append(normalize_citations)
