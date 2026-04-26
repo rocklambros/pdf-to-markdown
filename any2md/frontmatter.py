@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 import unicodedata
 from dataclasses import dataclass
 from typing import Literal
@@ -50,3 +51,19 @@ class SourceMeta:
 def estimate_tokens(body: str) -> int:
     """Rough token estimate: ceil(chars / 4). Spec §3.2."""
     return math.ceil(len(body) / 4)
+
+
+_H2_RE = re.compile(r"^##\s+\S.*$", re.MULTILINE)
+
+
+def recommend_chunk_level(body: str) -> str:
+    """Spec §3.2: h3 if any H2 section body > 1500 estimated tokens; else h2."""
+    matches = list(_H2_RE.finditer(body))
+    if not matches:
+        return "h2"
+    boundaries = [m.start() for m in matches] + [len(body)]
+    for start, end in zip(boundaries, boundaries[1:]):
+        section = body[start:end]
+        if estimate_tokens(section) > 1500:
+            return "h3"
+    return "h2"

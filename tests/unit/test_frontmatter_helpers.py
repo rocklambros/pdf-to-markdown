@@ -39,3 +39,22 @@ def test_estimate_tokens_ceil_chars_over_4():
     assert estimate_tokens("a" * 4) == 1
     assert estimate_tokens("a" * 5) == 2
     assert estimate_tokens("a" * 8) == 2
+
+
+from any2md.frontmatter import recommend_chunk_level
+
+
+def test_chunk_level_h2_when_no_h2_sections():
+    assert recommend_chunk_level("# Title\n\nbody only\n") == "h2"
+
+
+def test_chunk_level_h2_when_all_sections_short():
+    body = "# Title\n\n## A\n\nshort\n\n## B\n\nshort\n"
+    assert recommend_chunk_level(body) == "h2"
+
+
+def test_chunk_level_h3_when_any_section_exceeds_1500_tokens():
+    # 1500 tokens * 4 chars/token = 6000 chars
+    big = "x" * 6500
+    body = f"# Title\n\n## A\n\n{big}\n\n## B\n\nshort\n"
+    assert recommend_chunk_level(body) == "h3"
