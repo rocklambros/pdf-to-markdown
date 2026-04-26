@@ -69,6 +69,10 @@ _BYLINE_DETECT_RE = re.compile(
 _COVER_BLURB_KEYWORDS = (
     "feedback", "qr code", "scan the", "customer feedback form",
     "third edition", "corrected version",
+    # License notices (common on standards docs and licensed content)
+    "licensed to", "single user licence", "single user license",
+    "iso store order", "all rights reserved",
+    "copying and networking prohibited",
 )
 _TOC_LINE_HINTS_RE = re.compile(r"\.{3,}\s*\d+|^\s*page\s+\d+", re.IGNORECASE)
 
@@ -393,14 +397,31 @@ def extract_authors(
             authors = [a for a in authors if a]
             return _dedupe_authors(authors)[:20]
 
-    # Step 2 & 3: "Authors:" / "Author:" / "By" prefix
-    m = _AUTHORS_PREFIX_RE.search(body)
+    # Step 2 & 3: "Authors:" / "Author:" / "By" prefix — but only within
+    # the first ~20 lines after H1 to avoid false positives on mid-doc
+    # sentences like "By 'market governance mechanisms', we refer to ...".
+    lines = body.splitlines()
+    h1_idx = next(
+        (i for i, line in enumerate(lines) if line.startswith("# ")), -1
+    )
+    start = h1_idx + 1 if h1_idx >= 0 else 0
+    head_block = "\n".join(lines[start:start + 20])
+    m = _AUTHORS_PREFIX_RE.search(head_block)
     if m:
         raw = m.group(1).strip()
         names = [_normalize_author_name(n) for n in _split_authors(raw)]
         names = [n for n in names if n]
-        if names:
-            return _dedupe_authors(names)[:20]
+        # Sanity gate (applied after dedup):
+        # - First entry must start with uppercase (rejects mid-doc sentences
+        #   like "By 'market governance mechanisms', we refer to...")
+        # - Each name <= 50 chars (rejects sentence-fragment captures)
+        deduped = _dedupe_authors(names)[:20]
+        if (
+            deduped
+            and deduped[0][:1].isupper()
+            and all(len(n) <= 50 for n in deduped)
+        ):
+            return deduped
 
     # Step 4: academic byline (aggressive only)
     if profile == "conservative":
@@ -451,8 +472,17 @@ def is_arxiv_filename(name: str) -> str | None:
     base_no_ext = base
     if base_no_ext.lower().endswith(".pdf"):
         base_no_ext = base_no_ext[: -len(".pdf")]
-    # Match the entire stripped basename against the arxiv pattern.
-    m = re.match(r"^(\d{4}\.\d{4,5})(?:v\d+)?$", base_no_ext)
+    # Search for the arxiv ID anywhere in the basename. Common filename
+    # patterns: bare arxiv ID ("2501.17755v1.pdf"), prefixed with title
+    # ("AI_Governance_through_Markets-2501.17755v1.pdf"), or trailing.
+    # The negative-lookbehind (?<![0-9.]) prevents matching a number
+    # embedded in a longer numeric sequence.
+    m = re.search(r"(?<![0-9.])(\d{4}\.\d{4,5})(?:v\d+)?$", base_no_ext)
+    if m:
+        return m.group(1)
+    # Also accept the arxiv ID anywhere in the basename when followed by
+    # a non-digit/non-dot or end-of-string.
+    m = re.search(r"(?<![0-9.])(\d{4}\.\d{4,5})(?:v\d+)?(?![0-9.])", base_no_ext)
     if m:
         return m.group(1)
     return None
