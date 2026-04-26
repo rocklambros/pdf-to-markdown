@@ -257,8 +257,15 @@ def main():
         f"{warn_suffix}"
     )
 
-    # Exit code policy (Task 1: strict-mode warnings → 3; failure handling
-    # is layered in by Task 2). Argparse handles usage errors itself.
+    # Exit code policy:
+    #   0 = success
+    #   1 = usage / install error (argparse uses 2 by default; we use 1
+    #       for explicit pre-flight failures like missing Docling)
+    #   2 = >= 1 file failed entirely (HARD failure)
+    #   3 = >= 1 pipeline warning AND --strict (no hard failures)
+    # Failures take precedence over strict warnings.
+    if fail > 0:
+        sys.exit(2)
     had_strict_warning = args.strict and bool(warnings_seen)
     if had_strict_warning:
         sys.exit(3)
