@@ -25,3 +25,17 @@ def test_source_meta_defaults_are_safe():
     assert meta.lane == "text"
     assert meta.extracted_via == "heuristic"
     assert meta.doc_type == "txt"
+
+
+from any2md.frontmatter import estimate_tokens
+
+
+def test_estimate_tokens_zero_on_empty():
+    assert estimate_tokens("") == 0
+
+
+def test_estimate_tokens_ceil_chars_over_4():
+    # 4 chars -> 1 token, 5 chars -> 2 tokens (ceil)
+    assert estimate_tokens("a" * 4) == 1
+    assert estimate_tokens("a" * 5) == 2
+    assert estimate_tokens("a" * 8) == 2

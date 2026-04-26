@@ -8,6 +8,7 @@ never touch YAML directly.
 from __future__ import annotations
 
 import hashlib
+import math
 import unicodedata
 from dataclasses import dataclass
 from typing import Literal
@@ -44,3 +45,8 @@ class SourceMeta:
         "trafilatura", "trafilatura+bs4_fallback", "heuristic",
     ]
     lane: Lane
+
+
+def estimate_tokens(body: str) -> int:
+    """Rough token estimate: ceil(chars / 4). Spec §3.2."""
+    return math.ceil(len(body) / 4)
