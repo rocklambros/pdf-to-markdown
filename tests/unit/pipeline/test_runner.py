@@ -32,3 +32,13 @@ def test_run_invalid_lane_raises():
     import pytest
     with pytest.raises(ValueError, match="lane"):
         run("hello", "bogus", PipelineOptions())  # type: ignore[arg-type]
+
+
+def test_pipeline_options_has_high_fidelity_field():
+    opts = PipelineOptions(high_fidelity=True)
+    assert opts.high_fidelity is True
+
+
+def test_pipeline_options_high_fidelity_default_false():
+    opts = PipelineOptions()
+    assert opts.high_fidelity is False
