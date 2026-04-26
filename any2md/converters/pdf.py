@@ -108,9 +108,13 @@ def pdf_looks_complex(pdf_path: Path) -> bool:
 
 
 def _extract_via_docling(
-    pdf_path: Path, options: PipelineOptions
+    pdf_path: Path, options: PipelineOptions, output_dir: Path
 ) -> tuple[str, str]:
-    """Returns (markdown, 'docling'). Raises on Docling errors."""
+    """Returns (markdown, 'docling'). Raises on Docling errors.
+
+    When ``options.save_images`` is True, extracted picture images are
+    written to ``<output_dir>/images/<pdf_stem>/imgN.png``.
+    """
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import PdfPipelineOptions
     from docling.document_converter import DocumentConverter, PdfFormatOption
@@ -127,6 +131,25 @@ def _extract_via_docling(
         }
     )
     result = converter.convert(str(pdf_path))
+
+    if options.save_images:
+        pictures = getattr(result.document, "pictures", None) or []
+        if pictures:
+            images_dir = output_dir / "images" / pdf_path.stem
+            images_dir.mkdir(parents=True, exist_ok=True)
+            for i, picture in enumerate(pictures):
+                try:
+                    pil_image = picture.get_image(result.document)
+                    if pil_image is None:
+                        continue
+                    img_path = images_dir / f"img{i + 1}.png"
+                    pil_image.save(str(img_path))
+                except Exception as e:  # noqa: BLE001
+                    print(
+                        f"  WARN: failed to save image {i}: {e}",
+                        file=sys.stderr,
+                    )
+
     md = result.document.export_to_markdown()
     return md, "docling"
 
@@ -175,7 +198,9 @@ def convert_pdf(
 
         if use_docling:
             try:
-                md_text, extracted_via = _extract_via_docling(pdf_path, options)
+                md_text, extracted_via = _extract_via_docling(
+                    pdf_path, options, output_dir
+                )
                 lane = "structured"
             except Exception as e:  # noqa: BLE001 — fall back rather than fail
                 print(

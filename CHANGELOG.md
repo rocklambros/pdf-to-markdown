@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.0a3] — 2026-04-26
+
+Phase 3: text-lane post-processing stages and image/OCR flag wiring.
+
+### Added
+- Text-lane stages T1–T6 now active for all non-Docling output paths
+  (TXT, trafilatura HTML/URL, mammoth DOCX fallback, pymupdf4llm PDF
+  fallback):
+  - **T1 `repair_line_wraps`** — joins soft-wrapped lines inside
+    paragraphs while preserving lists, tables, code blocks, headings.
+  - **T2 `dehyphenate`** — merges `co-\noperation` → `cooperation`
+    when the joined word appears elsewhere in the document
+    (same-doc corroboration; conservative).
+  - **T3 `dedupe_paragraphs`** — drops a paragraph if it's identical to
+    the immediately previous one (PDF over-extraction artifact).
+  - **T4 `dedupe_toc_block`** — strips leading TOC blocks when ≥70% of
+    their entries reappear as H2/H3 headings later. Aggressive/maximum
+    profiles only.
+  - **T5 `strip_running_headers_footers`** — removes lines that repeat
+    ≥3 times across page boundaries (form-feed `\f`-aware).
+  - **T6 `restore_lists_and_code`** — wraps ≥4-line indented blocks
+    in fenced code.
+- New CLI flags `--ocr-figures` and `--save-images`. Both imply
+  `--high-fidelity`. With `--save-images`, the PDF Docling path writes
+  extracted images to `<output_dir>/images/<source_stem>/imgN.png`.
+
+### Changed
+- `repair_line_wraps` runs before `dehyphenate` so hyphens that span
+  joined lines are merged correctly.
+- Snapshot fixtures regenerated to reflect text-lane stage output.
+
 ## [1.0.0a2] — 2026-04-26
 
 Phase 2: Docling backend integration. PDFs and DOCX files can now be
