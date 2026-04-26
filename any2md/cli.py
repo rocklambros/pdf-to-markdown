@@ -4,6 +4,7 @@ import argparse
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from any2md.converters import (
     SUPPORTED_EXTENSIONS,
@@ -18,6 +19,55 @@ from any2md.utils import sanitize_filename, url_to_filename
 
 # Default max file size: 100 MB
 _DEFAULT_MAX_FILE_SIZE = 100 * 1024 * 1024
+
+
+def parse_meta_args(meta_args: list[str]) -> dict[str, Any]:
+    """Parse repeated ``--meta KEY=VAL`` arguments into a nested dict.
+
+    - ``KEY`` may be dotted (``a.b.c``) → builds a nested ``dict``.
+    - ``VAL`` containing commas becomes a ``list[str]`` (whitespace-trimmed).
+    - Otherwise ``VAL`` is the trimmed string.
+
+    Raises ``ValueError`` for malformed entries.
+    """
+    out: dict[str, Any] = {}
+    for arg in meta_args:
+        if "=" not in arg:
+            raise ValueError(f"--meta value must be KEY=VAL: {arg!r}")
+        key, val = arg.split("=", 1)
+        if "," in val:
+            parsed: Any = [v.strip() for v in val.split(",") if v.strip()]
+        else:
+            parsed = val.strip()
+        parts = key.split(".")
+        current = out
+        for part in parts[:-1]:
+            if part not in current or not isinstance(current[part], dict):
+                current[part] = {}
+            current = current[part]
+        current[parts[-1]] = parsed
+    return out
+
+
+def _deep_merge_overrides(
+    base: dict[str, Any], overrides: dict[str, Any]
+) -> dict[str, Any]:
+    """Deep-merge ``overrides`` into ``base`` (CLI-side mirror of frontmatter._deep_merge).
+
+    Used to combine config-file overrides with CLI ``--meta`` overrides
+    before forwarding the result into ``PipelineOptions``.
+    """
+    out = dict(base)
+    for key, val in overrides.items():
+        if (
+            key in out
+            and isinstance(out[key], dict)
+            and isinstance(val, dict)
+        ):
+            out[key] = _deep_merge_overrides(out[key], val)
+        else:
+            out[key] = val
+    return out
 
 
 def main():
@@ -110,7 +160,24 @@ def main():
         "{PREFIX}-{YYYY}-{TYPE}-{SHA8}. Defaults: PREFIX=LOCAL, TYPE=DOC. "
         "Override via .any2md.toml [document_id] (publisher_prefix, type_code).",
     )
+    parser.add_argument(
+        "--meta",
+        action="append",
+        default=[],
+        metavar="KEY=VAL",
+        help="Override frontmatter field. Repeatable. Arrays use comma "
+        "syntax. Nested keys use dot syntax (e.g. "
+        "generation_metadata.authored_by=human).",
+    )
     args = parser.parse_args()
+
+    try:
+        cli_meta = parse_meta_args(args.meta)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    overrides: dict[str, Any] = {}
+    overrides = _deep_merge_overrides(overrides, cli_meta)
 
     if args.high_fidelity or args.ocr_figures or args.save_images:
         from any2md._docling import has_docling, INSTALL_HINT_MSG
@@ -129,6 +196,7 @@ def main():
         save_images=args.save_images,
         strict=args.strict,
         auto_id=args.auto_id,
+        frontmatter_overrides=overrides or None,
     )
 
     # CLI-only output controls (not part of PipelineOptions).

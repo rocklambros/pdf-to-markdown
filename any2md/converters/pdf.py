@@ -235,7 +235,9 @@ def convert_pdf(
             extracted_via=extracted_via,
             lane=lane,
         )
-        full = compose(md_text, meta, options)
+        full = compose(
+            md_text, meta, options, overrides=options.frontmatter_overrides
+        )
 
         output_dir.mkdir(parents=True, exist_ok=True)
         out_path.write_text(full, encoding="utf-8", newline="\n")

@@ -8,8 +8,8 @@ must be a no-op on input it does not match.
 from __future__ import annotations
 
 from contextvars import ContextVar
-from dataclasses import dataclass
-from typing import Callable, Literal
+from dataclasses import dataclass, field
+from typing import Any, Callable, Literal
 
 Lane = Literal["structured", "text"]
 Profile = Literal["conservative", "aggressive", "maximum"]
@@ -30,6 +30,12 @@ class PipelineOptions:
     auto_id: bool = False
     auto_id_prefix: str = "LOCAL"
     auto_id_type_code: str = "DOC"
+    # ``frontmatter_overrides`` is the parsed merge of ``.any2md.toml``,
+    # ``--meta-file``, and CLI ``--meta KEY=VAL`` arguments (highest
+    # priority last). Forwarded into ``frontmatter.compose`` so user-
+    # supplied values replace derived fields. ``None`` means "no
+    # overrides" (the common case).
+    frontmatter_overrides: dict[str, Any] | None = field(default=None)
 
 
 Stage = Callable[[str, PipelineOptions], str]

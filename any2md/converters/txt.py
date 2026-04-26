@@ -182,7 +182,9 @@ def convert_txt(
         md_text, warnings = pipeline.run(md_text, "text", options)
         add_warnings(warnings)
         meta = _build_meta(txt_path, md_text)
-        full = compose(md_text, meta, options)
+        full = compose(
+            md_text, meta, options, overrides=options.frontmatter_overrides
+        )
 
         output_dir.mkdir(parents=True, exist_ok=True)
         out_path.write_text(full, encoding="utf-8", newline="\n")

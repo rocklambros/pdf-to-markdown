@@ -165,22 +165,25 @@ def _emit_array(values: list[str]) -> str:
     return f"[{items}]"
 
 
-def compose(body: str, meta: SourceMeta, options: PipelineOptions) -> str:
-    """Build a complete SSRM-compatible Markdown document.
-
-    Steps:
-    1. Normalize body to NFC + LF endings (matches content_hash invariant).
-    2. Derive title, content_hash, token_estimate, chunk_level, abstract.
-    3. Emit YAML frontmatter in spec §3.2-3.4 order.
-    4. Concatenate frontmatter + body.
-    """
-    # 1. Normalize body
+def _normalize_body(body: str) -> str:
+    """Normalize body to NFC + LF endings, ensuring trailing newline."""
     body = body.replace("\r\n", "\n").replace("\r", "\n")
     body = unicodedata.normalize("NFC", body)
     if not body.endswith("\n"):
         body += "\n"
+    return body
 
-    # 2. Derive
+
+def _build_fields(
+    body: str, meta: SourceMeta, options: PipelineOptions
+) -> dict[str, Any]:
+    """Build the ordered field map for the SSRM frontmatter block.
+
+    Returns an insertion-ordered dict matching spec §3.2-3.4. Only fields
+    that should be emitted are present; conditional fields (e.g. ``pages``,
+    ``keywords``, ``abstract_for_rag``) are omitted when empty so callers
+    can tell "absent" apart from "blank".
+    """
     fallback = meta.source_file or meta.source_url or "untitled"
     title = derive_title(body, meta.title_hint, fallback)
     content_hash = compute_content_hash(body)
@@ -190,46 +193,112 @@ def compose(body: str, meta: SourceMeta, options: PipelineOptions) -> str:
     today = _date_cls.today().isoformat()
     fm_date = meta.date or today
 
-    # 3. Emit YAML in SSRM-defined order
-    lines: list[str] = ["---"]
-    lines.append(f"title: {_emit_value(title)}")
     if options.auto_id:
         doc_id = generate_document_id(
             body,
             prefix=options.auto_id_prefix,
             type_code=options.auto_id_type_code,
         )
-        lines.append(f'document_id: "{doc_id}"')
     else:
-        lines.append('document_id: ""')
-    lines.append('version: "1"')
-    lines.append(f"date: {_emit_value(fm_date)}")
-    lines.append('status: "draft"')
-    lines.append('document_type: ""')
-    lines.append("content_domain: []")
-    lines.append(f"authors: {_emit_array(meta.authors)}")
-    lines.append(f"organization: {_emit_value(meta.organization or '')}")
-    lines.append("generation_metadata:")
-    lines.append('  authored_by: "unknown"')
-    lines.append(f'content_hash: "{content_hash}"')
+        doc_id = ""
+
+    fields: dict[str, Any] = {}
+    fields["title"] = title
+    fields["document_id"] = doc_id
+    fields["version"] = "1"
+    fields["date"] = fm_date
+    fields["status"] = "draft"
+    fields["document_type"] = ""
+    fields["content_domain"] = []
+    fields["authors"] = list(meta.authors)
+    fields["organization"] = meta.organization or ""
+    fields["generation_metadata"] = {"authored_by": "unknown"}
+    fields["content_hash"] = content_hash
     if meta.keywords:
-        lines.append(f"keywords: {_emit_array(meta.keywords)}")
-    lines.append(f"token_estimate: {token_est}")
-    lines.append(f'recommended_chunk_level: "{chunk_level}"')
+        fields["keywords"] = list(meta.keywords)
+    fields["token_estimate"] = token_est
+    fields["recommended_chunk_level"] = chunk_level
     if abstract:
-        lines.append(f"abstract_for_rag: {_emit_value(abstract)}")
+        fields["abstract_for_rag"] = abstract
     # any2md extension fields (preserved from v0.7 for traceability)
     if meta.source_file:
-        lines.append(f"source_file: {_emit_value(meta.source_file)}")
+        fields["source_file"] = meta.source_file
     if meta.source_url:
-        lines.append(f"source_url: {_emit_value(meta.source_url)}")
-    lines.append(f'type: "{meta.doc_type}"')          # v0.7-compat field (spec §3.2)
-    lines.append(f'extracted_via: "{meta.extracted_via}"')  # v1.0 provenance extension
+        fields["source_url"] = meta.source_url
+    fields["type"] = meta.doc_type           # v0.7-compat field (spec §3.2)
+    fields["extracted_via"] = meta.extracted_via  # v1.0 provenance extension
     if meta.pages is not None:
-        lines.append(f"pages: {meta.pages}")
+        fields["pages"] = meta.pages
     if meta.word_count is not None:
-        lines.append(f"word_count: {meta.word_count}")
+        fields["word_count"] = meta.word_count
+    return fields
+
+
+def _deep_merge(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+    """Deep-merge ``overrides`` into ``base`` and return a new dict.
+
+    Nested dicts merge recursively; lists and scalars from ``overrides``
+    replace those in ``base`` (no list extension). Override-only keys are
+    appended to the end of the field map in their iteration order.
+    """
+    out = dict(base)
+    for key, val in overrides.items():
+        if (
+            key in out
+            and isinstance(out[key], dict)
+            and isinstance(val, dict)
+        ):
+            out[key] = _deep_merge(out[key], val)
+        else:
+            out[key] = val
+    return out
+
+
+def _emit_field(key: str, value: Any, lines: list[str]) -> None:
+    """Emit one ``key: value`` line (or block) into ``lines``."""
+    if isinstance(value, dict):
+        lines.append(f"{key}:")
+        for subkey, subval in value.items():
+            lines.append(f"  {subkey}: {_emit_value(subval)}")
+        return
+    if isinstance(value, list):
+        # Only string-lists are supported for now (matches SSRM §3 fields).
+        lines.append(f"{key}: {_emit_array([str(v) for v in value])}")
+        return
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        lines.append(f"{key}: {value}")
+        return
+    # Default: scalar/string emission.
+    lines.append(f"{key}: {_emit_value(value)}")
+
+
+def _emit_yaml_with_body(fields: dict[str, Any], body: str) -> str:
+    """Serialize ``fields`` as YAML frontmatter and concatenate ``body``."""
+    lines: list[str] = ["---"]
+    for key, value in fields.items():
+        _emit_field(key, value, lines)
     lines.append("---")
     lines.append("")  # blank line separator
-
     return "\n".join(lines) + "\n" + body
+
+
+def compose(
+    body: str,
+    meta: SourceMeta,
+    options: PipelineOptions,
+    overrides: dict[str, Any] | None = None,
+) -> str:
+    """Build a complete SSRM-compatible Markdown document.
+
+    Steps:
+    1. Normalize body to NFC + LF endings (matches content_hash invariant).
+    2. Derive title, content_hash, token_estimate, chunk_level, abstract.
+    3. Deep-merge ``overrides`` (from ``--meta`` / ``--meta-file`` /
+       ``.any2md.toml``) over the derived field map.
+    4. Emit YAML frontmatter in spec §3.2-3.4 order and concatenate the body.
+    """
+    body = _normalize_body(body)
+    fields = _build_fields(body, meta, options)
+    if overrides:
+        fields = _deep_merge(fields, overrides)
+    return _emit_yaml_with_body(fields, body)
