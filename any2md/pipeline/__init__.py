@@ -22,6 +22,7 @@ class PipelineOptions:
     save_images: bool = False
     strip_links: bool = False
     strict: bool = False
+    high_fidelity: bool = False  # NEW: force Docling backend
 
 
 Stage = Callable[[str, PipelineOptions], str]

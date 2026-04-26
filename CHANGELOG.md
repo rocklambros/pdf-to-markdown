@@ -4,6 +4,53 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.0a2] — 2026-04-26
+
+Phase 2: Docling backend integration. PDFs and DOCX files can now be
+extracted via Docling for substantially higher fidelity on multi-column
+layouts and complex tables. Docling is an optional install — without it,
+any2md transparently falls back to pymupdf4llm (PDF) and mammoth (DOCX).
+
+### Added
+- New optional dependency: `pip install "any2md[high-fidelity]"` installs
+  Docling, which becomes the primary extraction backend for PDF and DOCX.
+- `any2md/_docling.py` — detection helper plus a rate-limited install hint
+  that surfaces on the stderr when an artifact-prone PDF is being converted
+  without Docling installed.
+- New CLI flag: `--high-fidelity` / `-H`. Forces Docling. Exits with code 1
+  and prints the install hint when Docling is not present.
+- `pdf_looks_complex(pdf_path)` heuristic — fast (< 50 ms) check used to
+  decide whether to print the install hint when Docling is missing.
+- New `PipelineOptions.high_fidelity` field (forwarded by the CLI).
+- Structured-lane post-processing stages now active for Docling-emitted
+  markdown:
+  - **S1 `lift_figure_captions`** — converts image markdown and HTML
+    `<figure>` blocks to italic `*Figure: caption*` lines. Drops image
+    references (preserved with `--save-images`, planned for Phase 3).
+  - **S2 `compact_tables`** — strips per-cell padding spaces in GFM tables;
+    preserves alignment row intact.
+  - **S3 `normalize_citations`** — coalesces `[1] [2] [3]` → `[1][2][3]`.
+  - **S4 `enforce_heading_hierarchy`** — guarantees a single H1 (promotes
+    first heading if needed; demotes subsequent H1s); flattens skipped
+    levels (H2 → H4 becomes H2 → H3).
+- Per-backend snapshot tests: PDF and DOCX now have `.docling.md` and
+  `.fallback.md` golden outputs.
+
+### Changed
+- PDF and DOCX converters select backend at runtime: Docling if importable,
+  pymupdf4llm/mammoth otherwise. Fallback also fires if Docling raises
+  during extraction (with stderr warning).
+- `extracted_via` frontmatter field reports `docling` for the new path.
+- `lane` is `"structured"` for Docling output, `"text"` for fallback —
+  the structured lane runs S1–S4 before shared cleanup; the text lane
+  runs only shared cleanup in Phase 2 (T1–T6 land in Phase 3).
+
+### Carried forward
+- All v0.7 + v1.0.0a1 CLI flags.
+- HTML/URL → trafilatura (Docling not used for web — purpose-built
+  boilerplate stripping is more important than structured layout).
+- TXT → heuristic `structurize()`.
+
 ## [1.0.0a1] — 2026-04-26
 
 First prerelease of any2md v1.0. Phase 1 of 5: foundation only — no Docling
