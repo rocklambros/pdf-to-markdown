@@ -44,8 +44,24 @@ def normalize_ligatures(text: str, _options: "PipelineOptions") -> str:
     return text.translate(_LIGATURE_TABLE)
 
 
+_QUOTE_TABLE = str.maketrans({
+    "“": '"',
+    "”": '"',
+    "‘": "'",
+    "’": "'",
+})
+
+
+def normalize_quotes_dashes(text: str, _options: "PipelineOptions") -> str:
+    """C4: Smart quotes → straight; ellipsis → "..."; en/em dashes preserved."""
+    text = text.translate(_QUOTE_TABLE)
+    text = text.replace("…", "...")
+    return text
+
+
 STAGES: list[Stage] = [
     nfc_normalize,
     strip_soft_hyphens,
     normalize_ligatures,
+    normalize_quotes_dashes,
 ]
