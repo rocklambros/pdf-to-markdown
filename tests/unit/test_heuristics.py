@@ -5,10 +5,27 @@ See spec §4 (heuristics module contract) and plan Batch A.
 
 from __future__ import annotations
 
+import socket
+from io import BytesIO
+from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError, URLError
+
 import pytest
 
 from any2md import heuristics
 from any2md.heuristics import OrgFilterResult
+
+
+_ARXIV_SAMPLE_XML = b'''<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Sample Paper Title</title>
+    <author><name>Alice Smith</name></author>
+    <author><name>Bob Jones</name></author>
+    <summary>This is the abstract of the sample paper.</summary>
+    <published>2025-01-30T12:00:00Z</published>
+  </entry>
+</feed>'''
 
 
 # --------------------------------------------------------------------- #
@@ -355,3 +372,136 @@ class TestIsArxivFilename:
 
     def test_non_arxiv_filename_returns_none(self):
         assert heuristics.is_arxiv_filename("report.pdf") is None
+
+
+# --------------------------------------------------------------------- #
+# arxiv_lookup
+# --------------------------------------------------------------------- #
+
+
+def _public_ip_addrinfo(*args, **kwargs):
+    """Replacement for socket.getaddrinfo that returns a public IP."""
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("151.101.1.42", 0))]
+
+
+class _FakeResponse:
+    """Mock urllib response context manager."""
+
+    def __init__(self, body: bytes, status: int = 200):
+        self._body = body
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self):
+        return self._body
+
+
+class TestArxivLookup:
+    def test_successful_response_returns_metadata(self):
+        with patch(
+            "any2md.heuristics.socket.getaddrinfo", _public_ip_addrinfo
+        ) if False else patch(
+            "socket.getaddrinfo", _public_ip_addrinfo
+        ), patch(
+            "urllib.request.urlopen",
+            return_value=_FakeResponse(_ARXIV_SAMPLE_XML),
+        ):
+            result = heuristics.arxiv_lookup("2501.17755")
+        assert result is not None
+        assert result["title"] == "Sample Paper Title"
+        assert result["authors"] == ["Alice Smith", "Bob Jones"]
+        assert result["abstract"] == "This is the abstract of the sample paper."
+        assert result["date"] == "2025-01-30"
+
+    def test_http_404_emits_warning_and_returns_none(self):
+        warnings_collected: list[list[str]] = []
+
+        def fake_add_warnings(ws):
+            warnings_collected.append(list(ws))
+
+        err = HTTPError(
+            "https://export.arxiv.org/api/query?id_list=bad",
+            404, "Not Found", {}, BytesIO(b""),
+        )
+        with patch("socket.getaddrinfo", _public_ip_addrinfo), patch(
+            "urllib.request.urlopen", side_effect=err
+        ), patch(
+            "any2md.converters.add_warnings", fake_add_warnings,
+        ):
+            result = heuristics.arxiv_lookup("bad")
+        assert result is None
+        assert warnings_collected, "expected add_warnings to be called"
+        assert any("404" in w or "HTTP" in w or "failed" in w
+                   for ws in warnings_collected for w in ws)
+
+    def test_timeout_emits_warning_and_returns_none(self):
+        warnings_collected: list[list[str]] = []
+
+        def fake_add_warnings(ws):
+            warnings_collected.append(list(ws))
+
+        with patch("socket.getaddrinfo", _public_ip_addrinfo), patch(
+            "urllib.request.urlopen",
+            side_effect=URLError("timed out"),
+        ), patch(
+            "any2md.converters.add_warnings", fake_add_warnings,
+        ):
+            result = heuristics.arxiv_lookup("2501.17755")
+        assert result is None
+        assert warnings_collected
+
+    def test_ssrf_block_for_private_ip(self):
+        warnings_collected: list[list[str]] = []
+
+        def fake_add_warnings(ws):
+            warnings_collected.append(list(ws))
+
+        def private_addrinfo(*a, **k):
+            return [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))
+            ]
+
+        with patch("socket.getaddrinfo", private_addrinfo), patch(
+            "any2md.converters.add_warnings", fake_add_warnings,
+        ):
+            result = heuristics.arxiv_lookup("2501.17755")
+        assert result is None
+        assert warnings_collected
+        # Should mention SSRF / disallowed / blocked
+        flat = " ".join(w for ws in warnings_collected for w in ws).lower()
+        assert "blocked" in flat or "disallowed" in flat
+
+    def test_malformed_xml_emits_warning_and_returns_none(self):
+        warnings_collected: list[list[str]] = []
+
+        def fake_add_warnings(ws):
+            warnings_collected.append(list(ws))
+
+        with patch("socket.getaddrinfo", _public_ip_addrinfo), patch(
+            "urllib.request.urlopen",
+            return_value=_FakeResponse(b"<not valid xml"),
+        ), patch(
+            "any2md.converters.add_warnings", fake_add_warnings,
+        ):
+            result = heuristics.arxiv_lookup("2501.17755")
+        assert result is None
+        assert warnings_collected
+        flat = " ".join(w for ws in warnings_collected for w in ws).lower()
+        assert "parse" in flat or "xml" in flat
+
+    def test_add_warnings_invoked_via_converters_module(self):
+        """Verify that the warning channel is the converters.add_warnings hook."""
+        mock_hook = MagicMock()
+        with patch("socket.getaddrinfo", _public_ip_addrinfo), patch(
+            "urllib.request.urlopen",
+            side_effect=URLError("boom"),
+        ), patch(
+            "any2md.converters.add_warnings", mock_hook,
+        ):
+            heuristics.arxiv_lookup("2501.17755")
+        assert mock_hook.called
