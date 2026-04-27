@@ -27,7 +27,7 @@ from any2md.converters import add_warnings, is_quiet
 from any2md.frontmatter import SourceMeta, compose
 from any2md.heuristics import filter_organization
 from any2md.pipeline import PipelineOptions
-from any2md.utils import sanitize_filename
+from any2md.utils import atomic_write_text, sanitize_filename
 
 
 _DOCLING_MSWORD_LOGGER = "docling.backend.msword_backend"
@@ -280,7 +280,7 @@ def convert_docx(
         full = compose(md_text, meta, options, overrides=options.frontmatter_overrides)
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(full, encoding="utf-8", newline="\n")
+        atomic_write_text(out_path, full)
         wc = meta.word_count or 0
         suffix = f", {len(warnings)} warning(s)" if warnings else ""
         if not is_quiet():
