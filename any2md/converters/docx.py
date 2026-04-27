@@ -66,6 +66,7 @@ class _DoclingMswordWarningCapture:
     def messages(self) -> list[str]:
         return [r.getMessage() for r in self._records]
 
+
 _NS_CORE = {
     "dc": "http://purl.org/dc/elements/1.1/",
     "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
@@ -232,9 +233,7 @@ def convert_docx(
             md_text, _ = _extract_via_mammoth(docx_path, options)
             extracted_via = "docling→mammoth (warning fallback)"
             lane = "text"
-            add_warnings(
-                [f"docling.msword_backend: {m}" for m in docling_warnings]
-            )
+            add_warnings([f"docling.msword_backend: {m}" for m in docling_warnings])
 
         md_text, warnings = pipeline.run(md_text, lane, options)
         add_warnings(warnings)
