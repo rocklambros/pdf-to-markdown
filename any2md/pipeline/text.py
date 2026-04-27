@@ -169,12 +169,12 @@ def dedupe_toc_block(text: str, options: "PipelineOptions") -> str:
     while start < len(lines) and not lines[start].strip():
         start += 1
     end = start
-    while end < len(lines) and (lines[end].strip() == "" or _TOC_LINE_RE.match(lines[end])):
+    while end < len(lines) and (
+        lines[end].strip() == "" or _TOC_LINE_RE.match(lines[end])
+    ):
         end += 1
 
-    toc_lines = [
-        ln.strip() for ln in lines[start:end] if _TOC_LINE_RE.match(ln)
-    ]
+    toc_lines = [ln.strip() for ln in lines[start:end] if _TOC_LINE_RE.match(ln)]
     if len(toc_lines) < 5:
         return text
 
@@ -187,10 +187,7 @@ def dedupe_toc_block(text: str, options: "PipelineOptions") -> str:
 
     # Find body H2/H3 titles AFTER the TOC block
     body = "\n".join(lines[end:])
-    body_titles = {
-        m.group(1).strip().lower()
-        for m in _BODY_HEADING_RE.finditer(body)
-    }
+    body_titles = {m.group(1).strip().lower() for m in _BODY_HEADING_RE.finditer(body)}
 
     if not toc_titles:
         return text

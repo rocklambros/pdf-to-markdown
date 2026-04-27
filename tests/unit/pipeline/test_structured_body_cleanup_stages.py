@@ -36,12 +36,7 @@ def test_structured_stages_include_orphan_punctuation():
 
 
 def test_orphan_pipe_row_stripped_in_structured_lane():
-    body = (
-        "# Title\n\nIntro.\n\n"
-        "|\n"
-        "\n"
-        "## Section\n\nBody.\n"
-    )
+    body = "# Title\n\nIntro.\n\n|\n\n## Section\n\nBody.\n"
     out, _ = run(body, "structured", PipelineOptions())
     assert "\n|\n" not in out
 
@@ -51,8 +46,11 @@ def test_t1_t6_stay_text_lane_only():
     must NOT run on Docling output (they damage tables)."""
     sn = _stage_names(structured.STAGES)
     for text_only_stage in (
-        "repair_line_wraps", "dehyphenate", "dedupe_paragraphs",
-        "dedupe_toc_block", "strip_running_headers_footers",
+        "repair_line_wraps",
+        "dehyphenate",
+        "dedupe_paragraphs",
+        "dedupe_toc_block",
+        "strip_running_headers_footers",
         "restore_lists_and_code",
     ):
         assert text_only_stage not in sn

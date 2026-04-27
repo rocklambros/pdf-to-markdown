@@ -26,16 +26,18 @@ def strip_soft_hyphens(text: str, _options: "PipelineOptions") -> str:
 # Whitelist of presentation-form ligatures and similar single-glyph compounds
 # that are safe to expand. NOT a blanket NFKC pass — that would fold
 # superscripts, subscripts, and CJK compatibility characters.
-_LIGATURE_TABLE = str.maketrans({
-    "ﬀ": "ff",
-    "ﬁ": "fi",
-    "ﬂ": "fl",
-    "ﬃ": "ffi",
-    "ﬄ": "ffl",
-    "ﬅ": "st",
-    "ﬆ": "st",
-    " ": " ",   # non-breaking space → regular space
-})
+_LIGATURE_TABLE = str.maketrans(
+    {
+        "ﬀ": "ff",
+        "ﬁ": "fi",
+        "ﬂ": "fl",
+        "ﬃ": "ffi",
+        "ﬄ": "ffl",
+        "ﬅ": "st",
+        "ﬆ": "st",
+        " ": " ",  # non-breaking space → regular space
+    }
+)
 
 
 def normalize_ligatures(text: str, _options: "PipelineOptions") -> str:
@@ -46,12 +48,14 @@ def normalize_ligatures(text: str, _options: "PipelineOptions") -> str:
     return text.translate(_LIGATURE_TABLE)
 
 
-_QUOTE_TABLE = str.maketrans({
-    "“": '"',
-    "”": '"',
-    "‘": "'",
-    "’": "'",
-})
+_QUOTE_TABLE = str.maketrans(
+    {
+        "“": '"',
+        "”": '"',
+        "‘": "'",
+        "’": "'",
+    }
+)
 
 
 def normalize_quotes_dashes(text: str, _options: "PipelineOptions") -> str:
@@ -108,8 +112,8 @@ def decode_html_entities(text: str, _options: "PipelineOptions") -> str:
 
 
 _INLINE_FN_RE = re.compile(
-    r"\[\^(?:\d+|[a-zA-Z][a-zA-Z0-9_-]*)\]"     # [^1] [^note] (markdown footnote refs)
-    r"|[¹²³⁰-⁹]"        # superscript digits ¹ ² ³ ⁰-⁹
+    r"\[\^(?:\d+|[a-zA-Z][a-zA-Z0-9_-]*)\]"  # [^1] [^note] (markdown footnote refs)
+    r"|[¹²³⁰-⁹]"  # superscript digits ¹ ² ³ ⁰-⁹
 )
 _FOOTNOTES_HEADING_RE = re.compile(
     r"^#{1,3}\s+(footnotes?|notes?|references?)\s*$",
@@ -129,7 +133,7 @@ def strip_footnote_markers(text: str, options: "PipelineOptions") -> str:
     if not m:
         return text
     body = text[: m.start()]
-    tail = text[m.start():]
+    tail = text[m.start() :]
     body = _INLINE_FN_RE.sub("", body)
     return body + tail
 

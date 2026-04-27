@@ -11,13 +11,7 @@ from any2md.pipeline.text import strip_orphan_punctuation
 
 
 def test_drops_lone_pipe_lines_aggressive():
-    text = (
-        "Real paragraph one.\n"
-        "\n"
-        "|\n"
-        "\n"
-        "Real paragraph two.\n"
-    )
+    text = "Real paragraph one.\n\n|\n\nReal paragraph two.\n"
     out = strip_orphan_punctuation(text, PipelineOptions(profile="aggressive"))
     assert "|\n" not in out
     assert "Real paragraph one." in out

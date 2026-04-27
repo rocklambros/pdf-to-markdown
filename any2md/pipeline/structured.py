@@ -35,7 +35,11 @@ def lift_figure_captions(text: str, options: "PipelineOptions") -> str:
         caption_line = f"*Figure: {alt}*" if alt else ""
         if options.save_images:
             # Keep the link below the caption
-            return f"{caption_line}\n\n![{alt}]({url})" if caption_line else f"![{alt}]({url})"
+            return (
+                f"{caption_line}\n\n![{alt}]({url})"
+                if caption_line
+                else f"![{alt}]({url})"
+            )
         return caption_line
 
     text = _IMG_LINK_RE.sub(_img_repl, text)
@@ -132,7 +136,7 @@ def enforce_heading_hierarchy(text: str, _options: "PipelineOptions") -> str:
     out = []
     last = 0
     for new_level, m in zip(levels, matches):
-        out.append(text[last:m.start()])
+        out.append(text[last : m.start()])
         out.append("#" * new_level + " " + m.group(2))
         last = m.end()
     out.append(text[last:])
@@ -158,9 +162,11 @@ from any2md.pipeline.text import (  # noqa: E402 — late import after STAGES in
     strip_repeated_byline,
 )
 
-STAGES.extend([
-    strip_repeated_byline,
-    dedupe_toc_table,
-    strip_cover_artifacts,
-    strip_orphan_punctuation,
-])
+STAGES.extend(
+    [
+        strip_repeated_byline,
+        dedupe_toc_table,
+        strip_cover_artifacts,
+        strip_orphan_punctuation,
+    ]
+)
