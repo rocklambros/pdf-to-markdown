@@ -96,9 +96,7 @@ def _http_error(code: int, location: str | None = None) -> urllib.error.HTTPErro
     msg = Message()
     if location:
         msg["Location"] = location
-    return urllib.error.HTTPError(
-        url="x", code=code, msg="redirect", hdrs=msg, fp=None
-    )
+    return urllib.error.HTTPError(url="x", code=code, msg="redirect", hdrs=msg, fp=None)
 
 
 class _FakeOpener:
@@ -115,9 +113,7 @@ class _FakeOpener:
 
 
 def _patch_opener(monkeypatch, opener: _FakeOpener) -> None:
-    monkeypatch.setattr(
-        "any2md._http.urllib.request.build_opener", lambda *_: opener
-    )
+    monkeypatch.setattr("any2md._http.urllib.request.build_opener", lambda *_: opener)
 
 
 def test_safe_fetch_simple_200(monkeypatch):

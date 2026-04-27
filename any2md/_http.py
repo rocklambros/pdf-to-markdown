@@ -35,9 +35,7 @@ def validate_url(url: str) -> str | None:
     if not parsed.hostname:
         return f"no hostname in URL: {url}"
     try:
-        infos = socket.getaddrinfo(
-            parsed.hostname, None, type=socket.SOCK_STREAM
-        )
+        infos = socket.getaddrinfo(parsed.hostname, None, type=socket.SOCK_STREAM)
     except socket.gaierror:
         return f"cannot resolve host: {parsed.hostname}"
     for *_, sockaddr in infos:

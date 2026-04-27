@@ -45,10 +45,13 @@ def _sanitize_log_text(s: str) -> str:
     """
     return _LOG_CONTROL_CHARS_RE.sub("", s)
 
+
 _MAX_DOCX_METADATA_SIZE = 1 * 1024 * 1024  # 1 MB; core.xml/app.xml are typically <10 KB
 
 
-def _safe_zip_open(z: zipfile.ZipFile, name: str, max_size: int = _MAX_DOCX_METADATA_SIZE):
+def _safe_zip_open(
+    z: zipfile.ZipFile, name: str, max_size: int = _MAX_DOCX_METADATA_SIZE
+):
     """Open a fixed-name DOCX member after a declared-size sanity check.
 
     Defends against zip-bomb amplification: a malicious DOCX can declare

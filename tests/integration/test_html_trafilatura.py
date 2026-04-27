@@ -1,7 +1,13 @@
 """Integration test: HTML converter end-to-end."""
 
+import socket
+import urllib.error
+from email.message import Message
+from io import BytesIO
+
 import yaml
 
+import any2md.converters.html as html_mod
 from any2md.converters.html import convert_html
 from any2md.pipeline import PipelineOptions
 
@@ -30,13 +36,6 @@ def test_html_local_file_emits_v1_frontmatter(fixture_dir, tmp_output_dir):
 
 
 # ---------- SSRF integration tests (v1.0.6 / F1) ----------
-
-import socket
-import urllib.error
-from email.message import Message
-from io import BytesIO
-
-import any2md.converters.html as html_mod
 
 
 class _FakeResp:
@@ -80,9 +79,7 @@ def _stub_dns(monkeypatch, mapping):
 
 
 def _patch_opener(monkeypatch, opener):
-    monkeypatch.setattr(
-        "any2md._http.urllib.request.build_opener", lambda *_: opener
-    )
+    monkeypatch.setattr("any2md._http.urllib.request.build_opener", lambda *_: opener)
 
 
 def test_fetch_url_rejects_redirect_to_metadata_endpoint(monkeypatch):

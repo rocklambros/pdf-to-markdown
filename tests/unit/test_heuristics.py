@@ -6,9 +6,7 @@ See spec §4 (heuristics module contract) and plan Batch A.
 from __future__ import annotations
 
 import socket
-from io import BytesIO
 from unittest.mock import MagicMock, patch
-from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -427,7 +425,9 @@ class _FakeResponse:
         return self._body
 
 
-def _safe_fetch_returning(body: bytes, headers: dict | None = None, err: str | None = None):
+def _safe_fetch_returning(
+    body: bytes, headers: dict | None = None, err: str | None = None
+):
     """Helper: build a stub safe_fetch() returning the given tuple."""
     return lambda *a, **kw: (body, headers or {}, err)
 

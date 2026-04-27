@@ -18,7 +18,7 @@ from any2md.utils import safe_dir_name
         ("", "untitled"),
         ("___", "untitled"),
         ("file.with.dots", "file_with_dots"),
-        ("emoji \U0001F4A9 here", "emoji_here"),
+        ("emoji \U0001f4a9 here", "emoji_here"),
     ],
 )
 def test_safe_dir_name(raw, expected):
