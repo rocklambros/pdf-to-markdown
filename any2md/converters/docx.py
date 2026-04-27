@@ -32,6 +32,24 @@ from any2md.utils import sanitize_filename
 
 _DOCLING_MSWORD_LOGGER = "docling.backend.msword_backend"
 
+_MAX_DOCX_METADATA_SIZE = 1 * 1024 * 1024  # 1 MB; core.xml/app.xml are typically <10 KB
+
+
+def _safe_zip_open(z: zipfile.ZipFile, name: str, max_size: int = _MAX_DOCX_METADATA_SIZE):
+    """Open a fixed-name DOCX member after a declared-size sanity check.
+
+    Defends against zip-bomb amplification: a malicious DOCX can declare
+    an uncompressed_size of 10 GB for ``core.xml`` and bomb the XML
+    parser. Raises ``ValueError`` (caught by ``convert_docx``'s existing
+    handler -> file fails cleanly).
+    """
+    info = z.getinfo(name)
+    if info.file_size > max_size:
+        raise ValueError(
+            f"{name} declared size {info.file_size} exceeds {max_size}-byte limit"
+        )
+    return z.open(name)
+
 
 class _DoclingMswordWarningCapture:
     """Buffer WARNING+ records from Docling's DOCX backend logger.
@@ -91,7 +109,7 @@ def _read_docx_metadata(docx_path: Path) -> dict[str, object]:
     try:
         with zipfile.ZipFile(docx_path) as z:
             try:
-                with z.open("docProps/core.xml") as f:
+                with _safe_zip_open(z, "docProps/core.xml") as f:
                     root = _xml_parse(f).getroot()
                 title = root.findtext("dc:title", namespaces=_NS_CORE)
                 if title:
@@ -107,7 +125,7 @@ def _read_docx_metadata(docx_path: Path) -> dict[str, object]:
             except KeyError:
                 pass
             try:
-                with z.open("docProps/app.xml") as f:
+                with _safe_zip_open(z, "docProps/app.xml") as f:
                     root = _xml_parse(f).getroot()
                 company = root.findtext("ext:Company", namespaces=_NS_APP)
                 application = root.findtext("ext:Application", namespaces=_NS_APP)
