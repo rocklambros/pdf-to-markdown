@@ -171,6 +171,11 @@ def main():
         help="Promote pipeline validation warnings to errors (exit 3).",
     )
     parser.add_argument(
+        "--no-config",
+        action="store_true",
+        help="Skip .any2md.toml auto-discovery (overrides default walk-up).",
+    )
+    parser.add_argument(
         "--docx-fallback-on-warn",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -223,7 +228,7 @@ def main():
     overrides: dict[str, Any] = {}
     auto_id_prefix, auto_id_type_code = "LOCAL", "DOC"
 
-    discovered = discover_config()
+    discovered = None if args.no_config else discover_config()
     if discovered is not None:
         cfg = load_toml(discovered)
         overrides = _deep_merge_overrides(overrides, extract_meta_overrides(cfg))
