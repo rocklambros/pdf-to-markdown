@@ -78,7 +78,14 @@ _FENCE_RE = re.compile(r"^```")
 
 
 def decode_html_entities(text: str, _options: "PipelineOptions") -> str:
-    """C8: Decode HTML entities outside fenced code blocks. Universal."""
+    """C8: Decode HTML entities outside fenced code blocks. Universal.
+
+    Loops ``html.unescape`` until output stabilizes (max 5 iterations) so
+    double-encoded entities like ``&amp;amp;`` → ``&amp;`` → ``&`` are
+    fully decoded. Some extractors (notably Docling on academic PDFs)
+    emit double-encoded entities; a single unescape pass leaves a
+    surviving ``&amp;`` in body text.
+    """
     lines = text.split("\n")
     out: list[str] = []
     in_fence = False
@@ -90,7 +97,13 @@ def decode_html_entities(text: str, _options: "PipelineOptions") -> str:
         if in_fence:
             out.append(line)
         else:
-            out.append(html.unescape(line))
+            current = line
+            for _ in range(5):
+                decoded = html.unescape(current)
+                if decoded == current:
+                    break
+                current = decoded
+            out.append(current)
     return "\n".join(out)
 
 
